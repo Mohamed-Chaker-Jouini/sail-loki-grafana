@@ -20,7 +20,10 @@ services:
       - ./topology:/topology                        # Ansible writes here
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource  # auto-installs on start
+      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
+      - HTTP_PROXY=http://10.93.144.53:8080
+      - HTTPS_PROXY=http://10.93.144.53:8080
+      - NO_PROXY=localhost,127.0.0.1,sail-loki,sail-fileserver
     restart: unless-stopped
     depends_on:
       - loki
