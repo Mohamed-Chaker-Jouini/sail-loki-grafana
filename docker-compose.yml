@@ -32,7 +32,11 @@ services:
     image: nginx:alpine
     container_name: sail-fileserver
     volumes:
-      - ./topology:/usr/share/nginx/html:ro
+      - ./topology:/usr/share/nginx/html:rw
     ports:
-      - "8880:80"                                   # expose on host IP
+      - "8880:80"
     restart: unless-stopped
+    entrypoint: >
+      sh -c '[ -f /usr/share/nginx/html/topology.json ] ||
+      echo "{\"nodes\":[],\"edges\":[]}" > /usr/share/nginx/html/topology.json
+      && nginx -g "daemon off;"'
