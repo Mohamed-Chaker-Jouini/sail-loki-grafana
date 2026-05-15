@@ -23,7 +23,7 @@ services:
       - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
       - HTTP_PROXY=http://10.93.144.53:8080
       - HTTPS_PROXY=http://10.93.144.53:8080
-      - NO_PROXY=localhost,127.0.0.1,sail-loki,sail-fileserver
+      - NO_PROXY=localhost,127.0.0.1,sail-loki,sail-fileserver,10.202.52.0/24
     restart: unless-stopped
     depends_on:
       - loki
