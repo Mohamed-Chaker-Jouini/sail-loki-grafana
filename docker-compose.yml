@@ -32,6 +32,7 @@ services:
     image: nginx:alpine
     container_name: sail-fileserver
     volumes:
-      - ./topology:/usr/share/nginx/html:ro         # serves topology.json
+      - ./topology:/usr/share/nginx/html:ro
+    ports:
+      - "8880:80"                                   # expose on host IP
     restart: unless-stopped
-    # No external port needed — Grafana reaches it via Docker network
