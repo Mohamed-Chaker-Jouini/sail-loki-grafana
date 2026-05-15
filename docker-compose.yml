@@ -17,11 +17,18 @@ services:
       - "3000:3000"
     volumes:
       - ./grafana-data:/var/lib/grafana
+      - ./topology:/topology                        # Ansible writes here
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource  # auto-installs on start
     restart: unless-stopped
     depends_on:
       - loki
 
-  # Alloy removed — Ansible now pushes directly to Loki via loki_push.py.
-  # No shared filesystem, no file tailing, no HA edge cases.
+  fileserver:
+    image: nginx:alpine
+    container_name: sail-fileserver
+    volumes:
+      - ./topology:/usr/share/nginx/html:ro         # serves topology.json
+    restart: unless-stopped
+    # No external port needed — Grafana reaches it via Docker network
