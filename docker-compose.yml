@@ -17,7 +17,6 @@ services:
       - "3000:3000"
     volumes:
       - ./grafana-data:/var/lib/grafana
-      - ./topology:/topology                        # Ansible writes here
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
@@ -27,15 +26,19 @@ services:
     restart: unless-stopped
     depends_on:
       - loki
+      - fileserver
 
   fileserver:
     image: nginx:alpine
     container_name: sail-fileserver
     volumes:
       - ./topology:/usr/share/nginx/html:rw
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8880:80"
     restart: unless-stopped
+    # Seeds an empty topology so Grafana never gets a 404 on first load,
+    # then hands off to nginx normally.
     entrypoint: >
       sh -c '[ -f /usr/share/nginx/html/topology.json ] ||
       echo "{\"nodes\":[],\"edges\":[]}" > /usr/share/nginx/html/topology.json
