@@ -6,263 +6,123 @@
 <title>SAIL — Drift Audit Log</title>
 <style>
   :root {
-    /* Classic Enterprise Light Mode Palette */
-    --bg:       #e9ecef;
-    --surface:  #ffffff;
-    --border:   #ced4da;
-    --text:     #212529;
-    --muted:    #495057;
-    --green:    #198754;
-    --red:      #dc3545;
-    --orange:   #d35400;
-    --blue:     #0056b3;
-    --purple:   #6f42c1;
-    --yellow:   #ffc107;
-    --header-bg:#f8f9fa;
+    --bg:        #e9ecef;
+    --surface:   #ffffff;
+    --border:    #ced4da;
+    --text:      #212529;
+    --muted:     #6c757d;
+    --green:     #198754;
+    --red:       #dc3545;
+    --orange:    #d35400;
+    --blue:      #0056b3;
+    --blue-dark: #004085;
+    --purple:    #6f42c1;
+    --yellow:    #b8860b;
+    --header-bg: #f8f9fa;
+    --row-even:  #fafbfc;
+    --row-hover: #f1f3f5;
   }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    /* The manager-approved font stack */
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 13px;
-    min-height: 100vh;
-  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;font-size:13px;min-height:100vh}
 
   /* ── Header ── */
-  header {
-    background: var(--surface);
-    border-bottom: 2px solid var(--blue);
-    padding: 16px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .logo { display: flex; align-items: center; gap: 10px; }
-  .logo-icon {
-    width: 36px; height: 36px;
-    background: var(--blue);
-    border-radius: 0; /* Square! */
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; font-weight: bold; color: #fff;
-  }
-  .logo-text h1 { font-size: 18px; font-weight: bold; color: var(--blue); }
-  .logo-text p  { font-size: 12px; color: var(--muted); }
-
-  .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  header{background:var(--surface);border-bottom:3px solid var(--blue);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .logo{display:flex;align-items:center;gap:10px}
+  .logo-icon{width:36px;height:36px;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;color:#fff}
+  .logo-text h1{font-size:17px;font-weight:bold;color:var(--blue)}
+  .logo-text p{font-size:11px;color:var(--muted);margin-top:1px}
+  .header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .auto-badge{font-size:11px;font-weight:bold;color:var(--green);border:1px solid var(--green);padding:3px 8px;background:#d1e7dd}
+  #last-refresh{font-size:11px;font-weight:bold;color:var(--muted)}
 
   /* ── Buttons ── */
-  button {
-    padding: 6px 12px;
-    border-radius: 0; /* Square! */
-    border: 1px solid var(--border);
-    background: var(--header-bg);
-    color: var(--text);
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-    transition: background .15s, border-color .15s;
-    white-space: nowrap;
-  }
-  button:hover { background: #e2e6ea; border-color: #dae0e5; }
-  button.primary {
-    background: var(--blue);
-    border-color: #004085;
-    color: #fff;
-  }
-  button.primary:hover { background: #004085; }
+  button{padding:6px 12px;border:1px solid var(--border);background:var(--header-bg);color:var(--text);cursor:pointer;font-size:12px;font-weight:bold;transition:background .12s,border-color .12s;white-space:nowrap;border-radius:0}
+  button:hover:not(:disabled){background:#e2e6ea;border-color:#adb5bd}
+  button:disabled{opacity:.45;cursor:default}
+  button.primary{background:var(--blue);border-color:var(--blue-dark);color:#fff}
+  button.primary:hover:not(:disabled){background:var(--blue-dark)}
+  button.danger{background:var(--red);border-color:#b02a37;color:#fff}
 
   /* ── Stats bar ── */
-  .stats-bar {
-    display: flex;
-    gap: 16px;
-    padding: 14px 24px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .stat {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 0;
-    padding: 10px 16px;
-    min-width: 130px;
-    box-shadow: 2px 2px 0px rgba(0,0,0,0.05); /* Rigid drop shadow */
-  }
-  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: bold; }
-  .stat-value { font-size: 22px; font-weight: bold; margin-top: 2px; }
+  .stats-bar{display:flex;gap:0;background:var(--surface);border-bottom:1px solid var(--border)}
+  .stat{padding:12px 20px;border-right:1px solid var(--border);min-width:120px;flex:1}
+  .stat:last-child{border-right:none}
+  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:bold;letter-spacing:.04em}
+  .stat-value{font-size:24px;font-weight:bold;margin-top:3px;line-height:1}
+  .stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
 
-  /* ── Filters ── */
-  .filters {
-    padding: 12px 24px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-    background: var(--header-bg);
-    border-bottom: 1px solid var(--border);
-  }
-  input, select {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 0; /* Square! */
-    color: var(--text);
-    padding: 6px 10px;
-    font-size: 12px;
-    outline: none;
-  }
-  input:focus, select:focus { border-color: var(--blue); }
-  input[type="text"] { width: 220px; }
-  input[type="date"] { width: 140px; }
-  .filter-label { font-size: 12px; font-weight: bold; color: var(--text); margin-right: 2px; }
+  /* ── Toolbar ── */
+  .toolbar{padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--header-bg);border-bottom:1px solid var(--border)}
+  .toolbar-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+  label.fl{font-size:11px;font-weight:bold;color:var(--muted);margin-right:2px}
+  input[type=text],input[type=date],select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 8px;font-size:12px;outline:none;border-radius:0}
+  input[type=text]:focus,input[type=date]:focus,select:focus{border-color:var(--blue)}
+  #f-search{width:210px}
+  input[type=date]{width:136px}
 
-  /* ── Table ── */
-  .table-wrap {
-    padding: 24px;
-    overflow-x: auto;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    font-size: 12px;
-  }
-  th {
-    text-align: left;
-    padding: 10px 12px;
-    background: var(--header-bg);
-    border-bottom: 2px solid var(--border);
-    border-right: 1px solid var(--border);
-    color: var(--text);
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    white-space: nowrap;
-    cursor: pointer;
-    user-select: none;
-  }
-  th:last-child { border-right: none; }
-  th:hover { background: #e2e6ea; }
-  th .sort-arrow { margin-left: 4px; color: var(--muted); }
-  th.sorted .sort-arrow { color: var(--blue); font-weight: bold; }
-
-  td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-    vertical-align: top;
-  }
-  td:last-child { border-right: none; }
-  tr:nth-child(even) td { background: #fdfdfd; } /* Zebra striping */
-  tr:hover td { background: #f1f3f5; }
+  /* ── Table wrap ── */
+  .table-wrap{padding:20px 24px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);font-size:12px}
+  thead tr{background:var(--header-bg)}
+  th{text-align:left;padding:9px 12px;border-bottom:2px solid var(--border);border-right:1px solid var(--border);font-size:11px;font-weight:bold;text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;color:var(--text)}
+  th:last-child{border-right:none;cursor:default}
+  th:hover:not(.no-sort){background:#e9ecef}
+  th .sa{margin-left:4px;color:var(--border);font-size:10px}
+  th.sorted .sa{color:var(--blue)}
+  td{padding:9px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);vertical-align:top}
+  td:last-child{border-right:none}
+  tr.data-row:nth-child(4n+3) td,tr.data-row:nth-child(4n+4) td{background:var(--row-even)}
+  tr.data-row:hover td{background:var(--row-hover)!important}
 
   /* ── Badges ── */
-  .badge {
-    display: inline-block;
-    padding: 3px 6px;
-    border-radius: 0; /* Square! */
-    font-size: 10px;
-    font-weight: bold;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  .badge-drift  { background: var(--red);   color: #fff; border: 1px solid #bd2130; }
-  .badge-clean  { background: var(--green); color: #fff; border: 1px solid #146c43; }
-  .badge-zone   { background: #e9ecef;      color: var(--text); border: 1px solid var(--border); margin-right: 3px; }
-  .badge-new-zone { background: var(--orange); color: #fff; border: 1px solid #b33900; }
+  .badge{display:inline-block;padding:3px 7px;font-size:10px;font-weight:bold;text-transform:uppercase;white-space:nowrap;border-radius:0}
+  .b-drift{background:var(--red);color:#fff;border:1px solid #b02a37}
+  .b-clean{background:var(--green);color:#fff;border:1px solid #146c43}
+  .b-zone{background:#e9ecef;color:var(--text);border:1px solid #adb5bd;margin:2px 2px 2px 0}
+  .b-new-zone{background:var(--orange);color:#fff;border:1px solid #b33900}
+  .b-synthetic{background:var(--yellow);color:#fff;border:1px solid #8a6600;font-size:9px;vertical-align:middle}
 
-  /* ── Delta cell ── */
-  .delta-zone { margin-bottom: 8px; }
-  .delta-zone:last-child { margin-bottom: 0; }
-  .delta-zone-name {
-    font-size: 11px;
-    font-weight: bold;
-    color: var(--text);
-    text-decoration: underline;
-    margin-bottom: 3px;
-  }
-  .ip-list { display: flex; flex-wrap: wrap; gap: 4px; }
-  .ip-chip {
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 0;
-    font-family: "Courier New", Courier, monospace;
-    font-weight: bold;
-  }
-  .ip-chip.add    { background: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
-  .ip-chip.remove { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; }
+  /* ── Delta chips ── */
+  .delta-block{margin-bottom:6px}
+  .delta-block:last-child{margin-bottom:0}
+  .delta-zname{font-size:10px;font-weight:bold;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+  .chips{display:flex;flex-wrap:wrap;gap:3px}
+  .chip{font-size:11px;padding:2px 7px;font-family:"Courier New",Courier,monospace;font-weight:bold;border-radius:0}
+  .chip.add{background:#d1e7dd;color:#0f5132;border:1px solid #a3cfbb}
+  .chip.rem{background:#f8d7da;color:#842029;border:1px solid #f1aeb5}
 
-  /* ── Expandable row ── */
-  .expand-btn {
-    background: none;
-    border: none;
-    color: var(--blue);
-    cursor: pointer;
-    padding: 0;
-    font-size: 11px;
-  }
-  .expand-btn:hover { background: none; text-decoration: underline; }
-  .detail-row { display: none; }
-  .detail-row.open { display: table-row; }
-  .detail-cell {
-    padding: 16px 24px;
-    background: #f8f9fa !important;
-    border-bottom: 2px solid var(--border);
-  }
-  .detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-  }
-  .detail-item label { font-size: 11px; font-weight: bold; color: var(--text); display: block; margin-bottom: 3px; }
-  .detail-item span  { font-size: 12px; font-family: "Courier New", Courier, monospace; background: #fff; padding: 2px 4px; border: 1px solid #dee2e6; display: inline-block;}
+  /* ── Detail row ── */
+  tr.detail-row{display:none}
+  tr.detail-row.open{display:table-row}
+  .detail-cell{padding:16px 24px;background:#f8f9fa!important;border-bottom:2px solid var(--border)}
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:14px}
+  .di label{font-size:10px;font-weight:bold;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:3px}
+  .di span{font-size:12px;font-family:"Courier New",Courier,monospace;background:#fff;padding:2px 5px;border:1px solid #dee2e6;display:inline-block;word-break:break-all}
+  .raw-section{margin-top:10px}
+  .raw-toggle{font-size:11px;color:var(--blue);cursor:pointer;border:none;background:none;padding:0;font-weight:bold;text-decoration:underline}
+  .raw-pre{display:none;margin-top:8px;background:#fff;border:1px solid var(--border);padding:10px;font-size:11px;font-family:"Courier New",Courier,monospace;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;color:var(--text)}
+  .raw-pre.open{display:block}
 
   /* ── Empty / loading ── */
-  .empty {
-    text-align: center;
-    padding: 60px 24px;
-    color: var(--muted);
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty{text-align:center;padding:60px 24px;color:var(--muted);background:var(--surface);border:1px solid var(--border)}
+  .empty-icon{font-size:40px;margin-bottom:12px}
+  .loading{text-align:center;padding:40px;color:var(--muted);font-weight:bold;font-size:13px}
 
   /* ── Pagination ── */
-  .pagination {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 0 24px 12px;
-    flex-wrap: wrap;
-  }
-  .pagination span { color: var(--text); font-size: 12px; font-weight: bold; }
-  .page-info { min-width: 120px; text-align: center; }
+  .pag{display:flex;align-items:center;justify-content:space-between;padding:8px 24px 16px;flex-wrap:wrap;gap:8px}
+  .pag-center{display:flex;align-items:center;gap:6px}
+  .pag-info{font-size:12px;font-weight:bold;color:var(--muted);min-width:180px;text-align:center}
+  .page-size-wrap{font-size:12px;color:var(--muted);font-weight:bold}
+
+  /* ── Connection error banner ── */
+  #err-banner{display:none;background:#f8d7da;border:1px solid #f1aeb5;color:#842029;padding:10px 24px;font-size:12px;font-weight:bold}
 
   /* ── Toast ── */
-  #toast {
-    position: fixed;
-    bottom: 24px; right: 24px;
-    background: #343a40;
-    color: #fff;
-    border: 1px solid #212529;
-    border-radius: 0;
-    padding: 12px 18px;
-    font-size: 12px;
-    font-weight: bold;
-    opacity: 0;
-    transition: opacity .3s;
-    pointer-events: none;
-    z-index: 999;
-  }
-  #toast.show { opacity: 1; }
+  #toast{position:fixed;bottom:24px;right:24px;background:#343a40;color:#fff;border:1px solid #212529;padding:11px 16px;font-size:12px;font-weight:bold;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9999}
+  #toast.show{opacity:1}
+
+  /* ── Hash highlight ── */
+  tr.data-row.hl td{background:#fff3cd!important;outline:2px solid var(--yellow)}
 </style>
 </head>
 <body>
@@ -275,385 +135,498 @@
       <p>SRX / Morpheus Reconciliation History</p>
     </div>
   </div>
-  <div class="header-actions">
-    <span id="last-refresh" style="color:var(--muted);font-size:11px;font-weight:bold;"></span>
+  <div class="header-right">
+    <span id="auto-badge" class="auto-badge" style="display:none">● AUTO-REFRESH 30s</span>
+    <span id="last-refresh"></span>
+    <button onclick="toggleAutoRefresh()" id="btn-auto">Enable Auto-Refresh</button>
     <button onclick="loadHistory()">↻ Refresh</button>
     <button onclick="exportCSV()" class="primary">⬇ Export CSV</button>
   </div>
 </header>
 
+<div id="err-banner">⚠ Could not reach the fileserver. Retrying… — <span id="err-detail"></span></div>
+
 <div class="stats-bar">
-  <div class="stat">
-    <div class="stat-label">Total Runs</div>
-    <div class="stat-value" id="stat-total">—</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Drift Events</div>
-    <div class="stat-value" id="stat-drift" style="color:var(--red)">—</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">IPs Added</div>
-    <div class="stat-value" id="stat-added" style="color:var(--green)">—</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">IPs Removed</div>
-    <div class="stat-value" id="stat-removed" style="color:var(--orange)">—</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">New Zones</div>
-    <div class="stat-value" id="stat-zones" style="color:var(--purple)">—</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">Retention</div>
-    <div class="stat-value" id="stat-retention" style="font-size:14px;padding-top:4px;color:var(--text)">—</div>
-  </div>
+  <div class="stat"><div class="stat-label">Total Runs</div><div class="stat-value" id="s-total">—</div><div class="stat-sub" id="s-total-sub"></div></div>
+  <div class="stat"><div class="stat-label">Drift Events</div><div class="stat-value" style="color:var(--red)" id="s-drift">—</div><div class="stat-sub" id="s-drift-sub"></div></div>
+  <div class="stat"><div class="stat-label">IPs Added</div><div class="stat-value" style="color:var(--green)" id="s-add">—</div><div class="stat-sub" id="s-add-sub"></div></div>
+  <div class="stat"><div class="stat-label">IPs Removed</div><div class="stat-value" style="color:var(--orange)" id="s-rem">—</div><div class="stat-sub" id="s-rem-sub"></div></div>
+  <div class="stat"><div class="stat-label">New Zones</div><div class="stat-value" style="color:var(--purple)" id="s-zones">—</div><div class="stat-sub" id="s-zones-sub"></div></div>
+  <div class="stat"><div class="stat-label">Retention</div><div class="stat-value" style="font-size:15px;padding-top:5px" id="s-ret">—</div><div class="stat-sub" id="s-ret-sub">records kept</div></div>
 </div>
 
-<div class="filters">
-  <span class="filter-label">Search:</span>
-  <input type="text"   id="f-search"   placeholder="IP, zone, or run ID…" oninput="applyFilters()">
-  <span class="filter-label">Type:</span>
+<div class="toolbar">
+  <label class="fl">Search:</label>
+  <input type="text" id="f-search" placeholder="IP, zone, run ID…" oninput="applyFilters()">
+  <div class="toolbar-sep"></div>
+  <label class="fl">Status:</label>
   <select id="f-type" onchange="applyFilters()">
-    <option value="">All runs</option>
+    <option value="">All</option>
     <option value="drift">Drift only</option>
     <option value="clean">Clean only</option>
   </select>
-  <span class="filter-label">Zone:</span>
-  <select id="f-zone" onchange="applyFilters()">
-    <option value="">All zones</option>
-  </select>
-  <span class="filter-label">From:</span>
+  <label class="fl">Zone:</label>
+  <select id="f-zone" onchange="applyFilters()"></select>
+  <div class="toolbar-sep"></div>
+  <label class="fl">From:</label>
   <input type="date" id="f-from" onchange="applyFilters()">
-  <span class="filter-label">To:</span>
-  <input type="date" id="f-to"   onchange="applyFilters()">
-  <button onclick="clearFilters()">✕ Clear</button>
+  <label class="fl">To:</label>
+  <input type="date" id="f-to" onchange="applyFilters()">
+  <div class="toolbar-sep"></div>
+  <button onclick="clearFilters()">✕ Clear Filters</button>
 </div>
 
-<br>
-<div class="pagination" id="pag-top"></div>
+<div id="loading-indicator" class="loading" style="display:none">Loading audit records…</div>
 
-<div class="table-wrap" style="padding-top: 0;">
+<div class="pag" id="pag-top"></div>
+
+<div class="table-wrap" style="padding-top:0;padding-bottom:0">
   <table id="audit-table">
     <thead>
       <tr>
-        <th data-col="ts"       onclick="sortBy('ts')">Timestamp <span class="sort-arrow">↕</span></th>
-        <th data-col="run_id"   onclick="sortBy('run_id')">Run ID <span class="sort-arrow">↕</span></th>
-        <th data-col="status"   onclick="sortBy('status')">Status <span class="sort-arrow">↕</span></th>
-        <th>Zones Affected</th>
-        <th>Changes</th>
-        <th data-col="duration" onclick="sortBy('duration')">Duration <span class="sort-arrow">↕</span></th>
-        <th>Actions</th>
+        <th data-col="ts"       onclick="sortBy('ts')">Timestamp <span class="sa">↕</span></th>
+        <th data-col="run_id"   onclick="sortBy('run_id')">Run ID <span class="sa">↕</span></th>
+        <th data-col="vsrx_ip"  onclick="sortBy('vsrx_ip')">vSRX <span class="sa">↕</span></th>
+        <th data-col="status"   onclick="sortBy('status')">Status <span class="sa">↕</span></th>
+        <th class="no-sort">Zones</th>
+        <th class="no-sort">Delta</th>
+        <th data-col="duration" onclick="sortBy('duration')">Duration <span class="sa">↕</span></th>
+        <th class="no-sort">▸</th>
       </tr>
     </thead>
     <tbody id="audit-body"></tbody>
   </table>
   <div id="empty-state" class="empty" style="display:none">
     <div class="empty-icon">📋</div>
-    <div>No audit records match the current filters.</div>
+    <div id="empty-msg">No audit records match the current filters.</div>
   </div>
 </div>
 
-<div class="pagination" id="pag-bottom"></div>
+<div class="pag" id="pag-bottom"></div>
 <div id="toast"></div>
 
 <script>
-// ── State ─────────────────────────────────────────────────────────────────────
-let allEntries   = [];
-let filtered     = [];
-let sortCol      = 'ts';
-let sortDir      = -1;          // -1 = desc (newest first)
-let currentPage  = 1;
-const PAGE_SIZE  = 25;
-let openRows     = new Set();
+// ── Config ────────────────────────────────────────────────────────────────────
+const HISTORY_URL = '/history';
+const HEALTH_URL  = '/health';
+const PAGE_SIZES  = [25, 50, 100];
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
-async function loadHistory() {
+// ── State ─────────────────────────────────────────────────────────────────────
+let allEntries  = [];
+let filtered    = [];
+let sortCol     = 'ts';
+let sortDir     = -1;
+let currentPage = 1;
+let pageSize    = 25;
+let openRows    = new Set();   // keyed by run_id+ts (stable)
+let autoTimer   = null;
+let isLoading   = false;
+let maxHistory  = 1000;
+
+// ── Robust new_zones parser ───────────────────────────────────────────────────
+// Handles: real JSON array, Python repr string, already-array, undefined
+function parseNewZones(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== 'string') return [];
+  const s = raw.trim();
+  if (!s || s === '[]') return [];
+  // Try JSON first
+  try { return JSON.parse(s); } catch(_) {}
+  // Python repr: ['ZONE1', 'ZONE2'] or ["ZONE1"]
+  try {
+    return JSON.parse(s.replace(/'/g, '"'));
+  } catch(_) {}
+  // Last resort: strip brackets, split on comma, trim quotes/spaces
+  return s.replace(/^\[|\]$/g,'').split(',')
+          .map(t => t.trim().replace(/^['"]|['"]$/g,''))
+          .filter(Boolean);
+}
+
+// ── Fetch & parse ─────────────────────────────────────────────────────────────
+async function loadHistory(silent=false) {
+  if (isLoading) return;
+  isLoading = true;
+  if (!silent) {
+    document.getElementById('loading-indicator').style.display = 'block';
+    document.getElementById('audit-body').innerHTML = '';
+    document.getElementById('empty-state').style.display = 'none';
+  }
+
   try {
     const [histRes, healthRes] = await Promise.all([
-      fetch('/history'),
-      fetch('/health'),
+      fetch(HISTORY_URL + '?t=' + Date.now()),
+      fetch(HEALTH_URL  + '?t=' + Date.now()),
     ]);
-    allEntries = await histRes.json();
-    const health = await healthRes.json();
 
-    document.getElementById('stat-retention').textContent =
-      `${allEntries.length} / ${health.max_history}`;
+    if (!histRes.ok) throw new Error(`HTTP ${histRes.status}`);
+
+    allEntries = await histRes.json();
+    // Normalise every entry once on load
+    allEntries.forEach(e => { e._nz = parseNewZones(e.new_zones); });
+
+    const health = await healthRes.json().catch(() => ({}));
+    maxHistory = health.max_history || 1000;
+
+    document.getElementById('err-banner').style.display = 'none';
     document.getElementById('last-refresh').textContent =
-      'UPDATED: ' + new Date().toLocaleTimeString().toUpperCase();
+      'LAST UPDATED: ' + new Date().toLocaleTimeString().toUpperCase();
 
     populateZoneFilter();
-    computeStats();
-    applyFilters();
-  } catch (e) {
-    showToast('Failed to load history: ' + e.message);
+    applyFilters();          // also calls computeStats() on filtered set
+    checkHashNav();
+
+  } catch(e) {
+    document.getElementById('err-banner').style.display = 'block';
+    document.getElementById('err-detail').textContent = e.message;
+    showToast('Load failed: ' + e.message);
+  } finally {
+    isLoading = false;
+    document.getElementById('loading-indicator').style.display = 'none';
   }
 }
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
-function computeStats() {
-  let drifts = 0, added = 0, removed = 0, newZones = 0;
-  for (const e of allEntries) {
+// ── Stats (computed on filtered set) ─────────────────────────────────────────
+function computeStats(src) {
+  let drifts=0, added=0, removed=0, newZ=0;
+  for (const e of src) {
     if (e.changed) drifts++;
-    const d = e.delta_map || {};
-    for (const z of Object.values(d)) {
-      added   += (z.to_add    || []).length;
-      removed += (z.to_remove || []).length;
+    for (const z of Object.values(e.delta_map||{})) {
+      added   += (z.to_add   ||[]).length;
+      removed += (z.to_remove||[]).length;
     }
-    if (e.new_zones && e.new_zones.length) newZones += e.new_zones.length;
+    newZ += (e._nz||[]).length;
   }
-  document.getElementById('stat-total'  ).textContent = allEntries.length;
-  document.getElementById('stat-drift'  ).textContent = drifts;
-  document.getElementById('stat-added'  ).textContent = added;
-  document.getElementById('stat-removed').textContent = removed;
-  document.getElementById('stat-zones'  ).textContent = newZones;
+  const tot = src.length;
+  const pct = n => tot ? ' (' + Math.round(n/tot*100) + '%)' : '';
+
+  set('s-total', tot);
+  set('s-total-sub', 'of ' + allEntries.length + ' total');
+  set('s-drift', drifts);     set('s-drift-sub', pct(drifts)  + ' of shown');
+  set('s-add',   added);      set('s-add-sub',   added   + ' IPs');
+  set('s-rem',   removed);    set('s-rem-sub',   removed + ' IPs');
+  set('s-zones', newZ);       set('s-zones-sub', 'discovered');
+  set('s-ret',   allEntries.length + ' / ' + maxHistory);
 }
 
-// ── Zone filter population ────────────────────────────────────────────────────
+function set(id, v) { const el=document.getElementById(id); if(el) el.textContent=v; }
+
+// ── Zone filter ───────────────────────────────────────────────────────────────
 function populateZoneFilter() {
   const zones = new Set();
-  for (const e of allEntries) {
-    for (const z of Object.keys(e.delta_map || {})) zones.add(z);
-  }
+  allEntries.forEach(e => Object.keys(e.delta_map||{}).forEach(z => zones.add(z)));
   const sel = document.getElementById('f-zone');
   const cur = sel.value;
   sel.innerHTML = '<option value="">All zones</option>';
-  for (const z of [...zones].sort()) {
+  [...zones].sort().forEach(z => {
     const o = document.createElement('option');
     o.value = z; o.textContent = z;
     if (z === cur) o.selected = true;
     sel.appendChild(o);
-  }
+  });
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 function applyFilters() {
-  const search = document.getElementById('f-search').value.toLowerCase();
-  const type   = document.getElementById('f-type').value;
-  const zone   = document.getElementById('f-zone').value;
-  const from   = document.getElementById('f-from').value;
-  const to     = document.getElementById('f-to').value;
+  const q    = document.getElementById('f-search').value.toLowerCase().trim();
+  const type = document.getElementById('f-type').value;
+  const zone = document.getElementById('f-zone').value;
+  const from = document.getElementById('f-from').value;
+  const to   = document.getElementById('f-to').value;
 
   filtered = allEntries.filter(e => {
-    if (type === 'drift' && !e.changed) return false;
-    if (type === 'clean' &&  e.changed) return false;
-    if (zone && !Object.keys(e.delta_map || {}).includes(zone)) return false;
-
-    if (from) {
-      const d = new Date(e.ts * 1000).toISOString().slice(0, 10);
-      if (d < from) return false;
+    if (type==='drift' && !e.changed) return false;
+    if (type==='clean' &&  e.changed) return false;
+    if (zone && !Object.keys(e.delta_map||{}).includes(zone)) return false;
+    if (from || to) {
+      const d = new Date(e.ts*1000).toISOString().slice(0,10);
+      if (from && d < from) return false;
+      if (to   && d > to  ) return false;
     }
-    if (to) {
-      const d = new Date(e.ts * 1000).toISOString().slice(0, 10);
-      if (d > to) return false;
-    }
-    if (search) {
-      const hay = JSON.stringify(e).toLowerCase();
-      if (!hay.includes(search)) return false;
+    if (q) {
+      const hay = [
+        e.run_id, e.vsrx_ip,
+        new Date(e.ts*1000).toLocaleString(),
+        JSON.stringify(e.delta_map),
+        (e._nz||[]).join(' ')
+      ].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
     }
     return true;
   });
 
   sortFiltered();
   currentPage = 1;
+  computeStats(filtered);
   render();
 }
 
 function clearFilters() {
-  ['f-search','f-from','f-to'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f-type').value = '';
-  document.getElementById('f-zone').value = '';
+  ['f-search','f-from','f-to'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('f-type').value='';
+  document.getElementById('f-zone').value='';
   applyFilters();
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
 function sortBy(col) {
-  if (sortCol === col) sortDir *= -1;
-  else { sortCol = col; sortDir = -1; }
-  document.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
-  document.querySelector(`th[data-col="${col}"]`)?.classList.add('sorted');
+  if (sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=-1; }
+  document.querySelectorAll('th[data-col]').forEach(th => {
+    const isActive = th.dataset.col===col;
+    th.classList.toggle('sorted', isActive);
+    const sa = th.querySelector('.sa');
+    if (sa) sa.textContent = isActive ? (sortDir===-1?'↓':'↑') : '↕';
+  });
   sortFiltered();
   render();
 }
 
 function sortFiltered() {
-  filtered.sort((a, b) => {
-    let av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
-    if (typeof av === 'string') av = av.toLowerCase(), bv = bv.toLowerCase();
-    return av < bv ? sortDir : av > bv ? -sortDir : 0;
+  filtered.sort((a,b) => {
+    let av, bv;
+    if (sortCol==='status')   { av=a.changed?1:0;     bv=b.changed?1:0; }
+    else if (sortCol==='duration') { av=a.duration_s??-1; bv=b.duration_s??-1; }
+    else { av=a[sortCol]??''; bv=b[sortCol]??''; }
+    if (typeof av==='string') { av=av.toLowerCase(); bv=bv.toLowerCase(); }
+    return av<bv ? sortDir : av>bv ? -sortDir : 0;
   });
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
-function render() {
-  const tbody  = document.getElementById('audit-body');
-  const empty  = document.getElementById('empty-state');
-  const start  = (currentPage - 1) * PAGE_SIZE;
-  const page   = filtered.slice(start, start + PAGE_SIZE);
+function rowKey(e) {
+  return 'r-' + String(e.ts||'0') + '-' + String(e.run_id||'x').replace(/[^a-z0-9]/gi,'-');
+}
 
+function render() {
+  const tbody = document.getElementById('audit-body');
+  const empty = document.getElementById('empty-state');
   tbody.innerHTML = '';
 
   if (!filtered.length) {
     empty.style.display = 'block';
-    renderPagination();
+    document.getElementById('empty-msg').textContent =
+      allEntries.length===0
+        ? 'No audit records yet. Waiting for the first Ansible run…'
+        : 'No records match the current filters.';
+    renderPag();
     return;
   }
   empty.style.display = 'none';
 
+  const start = (currentPage-1)*pageSize;
+  const page  = filtered.slice(start, start+pageSize);
+
   for (const e of page) {
-    const rid    = e.run_id || '—';
-    const ts     = e.ts ? new Date(e.ts * 1000).toLocaleString() : '—';
-    const dur    = e.duration_s != null ? e.duration_s.toFixed(1) + 's' : '—';
-    const drift  = e.changed;
-    const dmap   = e.delta_map || {};
-    let nz = e.new_zones || [];
-    if (typeof nz === 'string') {
-      try { 
-        // Convert Python/Ansible single-quote strings to valid JSON double-quotes
-        nz = JSON.parse(nz.replace(/'/g, '"')); 
-      } catch(err) { 
-        nz = []; 
-      }
-    }
-    if (!Array.isArray(nz)) nz = [];
+    const rk     = rowKey(e);
+    const ts     = e.ts ? new Date(e.ts*1000).toLocaleString() : '—';
+    const dur    = e.duration_s!=null ? e.duration_s.toFixed(1)+'s' : '—';
+    const synth  = e.duration_s===2.5;   // flagged as synthetic
+    const dmap   = e.delta_map||{};
+    const nz     = e._nz||[];
+    const isOpen = openRows.has(rk);
 
-    // Zones affected
-    const zonesHtml = Object.keys(dmap).map(z => {
-      const hasChange = (dmap[z].to_add?.length || 0) + (dmap[z].to_remove?.length || 0) > 0;
-      return `<span class="badge ${hasChange ? 'badge-zone' : ''}" style="${hasChange?'':'color:var(--muted);background:transparent;border:none'}">${z}</span>`;
-    }).join('') || '<span style="color:var(--muted)">—</span>';
+    // Zones cell
+    const zoneKeys = Object.keys(dmap);
+    const zonesHtml = zoneKeys.length
+      ? zoneKeys.map(z => `<span class="badge b-zone">${z}</span>`).join('')
+      : '<span style="color:var(--muted)">—</span>';
 
-    // Changes summary
-    let changesHtml = '';
-    for (const [z, d] of Object.entries(dmap)) {
-      const adds = d.to_add || [], rems = d.to_remove || [];
+    // Delta cell — only rendered when there are actual changes
+    let deltaHtml = '';
+    for (const [z,d] of Object.entries(dmap)) {
+      const adds = d.to_add||[], rems=d.to_remove||[];
       if (!adds.length && !rems.length) continue;
-      changesHtml += `<div class="delta-zone">
-        <div class="delta-zone-name">${z}</div>
-        <div class="ip-list">
-          ${adds.map(ip => `<span class="ip-chip add">+${ip}</span>`).join('')}
-          ${rems.map(ip => `<span class="ip-chip remove">-${ip}</span>`).join('')}
-        </div>
-      </div>`;
+      deltaHtml += `<div class="delta-block">
+        <div class="delta-zname">${z}</div>
+        <div class="chips">
+          ${adds.map(ip=>`<span class="chip add">+${ip}</span>`).join('')}
+          ${rems.map(ip=>`<span class="chip rem">−${ip}</span>`).join('')}
+        </div></div>`;
     }
     if (nz.length) {
-      changesHtml += nz.map(z => `<span class="badge badge-new-zone">NEW ZONE: ${z}</span>`).join(' ');
+      deltaHtml += nz.map(z=>`<span class="badge b-new-zone" style="margin-top:4px;display:inline-block">NEW ZONE: ${z}</span>`).join(' ');
     }
-    if (!changesHtml) changesHtml = '<span style="color:var(--muted);font-size:12px;font-style:italic;">No changes recorded</span>';
-
-    const rowId    = `row-${e.ts}-${rid}`.replace(/[^a-z0-9-]/gi, '-');
-    const detailId = `det-${rowId}`;
-    const isOpen   = openRows.has(rowId);
+    if (!deltaHtml && e.changed) {
+      deltaHtml = '<span style="color:var(--muted);font-style:italic">New zone only — no IP deltas</span>';
+    }
 
     // Main row
     const tr = document.createElement('tr');
+    tr.className = 'data-row';
+    tr.id = rk;
     tr.innerHTML = `
-      <td style="white-space:nowrap;font-family:'Courier New', Courier, monospace;font-size:12px">${ts}</td>
-      <td style="font-family:'Courier New', Courier, monospace;font-size:12px;color:var(--text)">${rid.slice(0,12)}</td>
-      <td><span class="badge ${drift ? 'badge-drift' : 'badge-clean'}">${drift ? 'DRIFT' : 'CLEAN'}</span></td>
+      <td style="white-space:nowrap;font-family:'Courier New',monospace">${ts}</td>
+      <td style="font-family:'Courier New',monospace;color:var(--blue)" title="${esc(e.run_id||'')}">
+        <a href="#${esc(rk)}" onclick="return false;" style="color:inherit;text-decoration:none">${esc((e.run_id||'—').slice(0,14))}</a>
+      </td>
+      <td style="font-family:'Courier New',monospace">${esc(e.vsrx_ip||'—')}</td>
+      <td><span class="badge ${e.changed?'b-drift':'b-clean'}">${e.changed?'DRIFT':'CLEAN'}</span></td>
       <td>${zonesHtml}</td>
-      <td>${changesHtml}</td>
-      <td style="color:var(--text);white-space:nowrap">${dur}</td>
-      <td><button class="expand-btn" onclick="toggleDetail('${rowId}','${detailId}',this)">${isOpen ? '▲ CLOSE' : '▼ DETAILS'}</button></td>
-    `;
+      <td>${deltaHtml || '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="white-space:nowrap">
+        ${dur}${synth?` <span class="badge b-synthetic" title="Duration hardcoded in playbook">SYNTH</span>`:''}
+      </td>
+      <td>
+        <button onclick="toggleDetail('${rk}')" id="btn-${rk}">${isOpen?'▲':'▼'}</button>
+      </td>`;
     tbody.appendChild(tr);
 
     // Detail row
-    const detailTr = document.createElement('tr');
-    detailTr.id = detailId;
-    detailTr.className = 'detail-row' + (isOpen ? ' open' : '');
-    detailTr.innerHTML = `
-      <td colspan="7" class="detail-cell">
+    const ipAdded   = Object.values(dmap).flatMap(d=>d.to_add||[]);
+    const ipRemoved = Object.values(dmap).flatMap(d=>d.to_remove||[]);
+    const det = document.createElement('tr');
+    det.className = 'detail-row' + (isOpen?' open':'');
+    det.id = 'det-'+rk;
+    det.innerHTML = `
+      <td colspan="8" class="detail-cell">
         <div class="detail-grid">
-          <div class="detail-item"><label>Full Run ID</label><span>${rid}</span></div>
-          <div class="detail-item"><label>Timestamp (Unix)</label><span>${e.ts}</span></div>
-          <div class="detail-item"><label>vSRX IP</label><span>${e.vsrx_ip || 'N/A'}</span></div>
-          <div class="detail-item"><label>Total zones</label><span>${Object.keys(dmap).length}</span></div>
-          <div class="detail-item"><label>New zones created</label><span>${nz.join(', ') || 'None'}</span></div>
-          <div class="detail-item"><label>IPs added</label><span>${Object.values(dmap).flatMap(d=>d.to_add||[]).join(', ') || 'None'}</span></div>
-          <div class="detail-item"><label>IPs removed</label><span>${Object.values(dmap).flatMap(d=>d.to_remove||[]).join(', ') || 'None'}</span></div>
-          <div class="detail-item"><label>Duration</label><span>${dur}</span></div>
+          <div class="di"><label>Full Run ID</label><span>${esc(e.run_id||'—')}</span></div>
+          <div class="di"><label>Unix Timestamp</label><span>${e.ts||'—'}</span></div>
+          <div class="di"><label>vSRX IP</label><span>${esc(e.vsrx_ip||'—')}</span></div>
+          <div class="di"><label>Zones in Run</label><span>${zoneKeys.join(', ')||'none'}</span></div>
+          <div class="di"><label>New Zones</label><span>${nz.join(', ')||'none'}</span></div>
+          <div class="di"><label>IPs Added (${ipAdded.length})</label><span>${ipAdded.join(', ')||'none'}</span></div>
+          <div class="di"><label>IPs Removed (${ipRemoved.length})</label><span>${ipRemoved.join(', ')||'none'}</span></div>
+          <div class="di"><label>Duration</label><span>${dur}${synth?' ⚠ synthetic':''}</span></div>
         </div>
-      </td>
-    `;
-    tbody.appendChild(detailTr);
+        <div class="raw-section">
+          <button class="raw-toggle" onclick="toggleRaw('raw-${rk}')">{ } View raw delta_map JSON</button>
+          <pre class="raw-pre" id="raw-${rk}">${esc(JSON.stringify(dmap,null,2))}</pre>
+        </div>
+      </td>`;
+    tbody.appendChild(det);
   }
 
-  renderPagination();
+  renderPag();
+  // Re-highlight if hash is set
+  const hash = location.hash.slice(1);
+  if (hash) highlight(hash);
 }
 
-function toggleDetail(rowId, detailId, btn) {
-  const row = document.getElementById(detailId);
-  if (row.classList.contains('open')) {
-    row.classList.remove('open');
-    openRows.delete(rowId);
-    btn.textContent = '▼ DETAILS';
-  } else {
-    row.classList.add('open');
-    openRows.add(rowId);
-    btn.textContent = '▲ CLOSE';
-  }
+function toggleDetail(rk) {
+  const det = document.getElementById('det-'+rk);
+  const btn = document.getElementById('btn-'+rk);
+  if (!det) return;
+  const open = det.classList.toggle('open');
+  if (open) openRows.add(rk); else openRows.delete(rk);
+  if (btn) btn.textContent = open?'▲':'▼';
+}
+
+function toggleRaw(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('open');
+}
+
+function highlight(rk) {
+  document.querySelectorAll('tr.data-row.hl').forEach(r=>r.classList.remove('hl'));
+  const row = document.getElementById(rk);
+  if (row) { row.classList.add('hl'); row.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+
+function checkHashNav() {
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+  // Find which page it's on
+  const idx = filtered.findIndex(e => rowKey(e)===hash);
+  if (idx===-1) return;
+  const pg = Math.floor(idx/pageSize)+1;
+  if (pg!==currentPage) { currentPage=pg; render(); }
+  setTimeout(()=>highlight(hash), 80);
 }
 
 // ── Pagination ────────────────────────────────────────────────────────────────
-function renderPagination() {
-  const total = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+function renderPag() {
+  const total = Math.ceil(filtered.length/pageSize)||1;
+  const info  = `PAGE ${currentPage} OF ${total} — ${filtered.length} RECORDS`;
   const html  = `
+    <button onclick="goPage(1)"            ${currentPage<=1?'disabled':''}>«</button>
     <button onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>‹ PREV</button>
-    <span class="page-info">PAGE ${currentPage} OF ${total} (${filtered.length} RECORDS)</span>
+    <span class="pag-info">${info}</span>
     <button onclick="goPage(${currentPage+1})" ${currentPage>=total?'disabled':''}>NEXT ›</button>
-  `;
+    <button onclick="goPage(${total})"     ${currentPage>=total?'disabled':''}>»</button>
+    <span class="page-size-wrap">
+      Show:
+      ${PAGE_SIZES.map(n=>`<button onclick="setPageSize(${n})" style="${pageSize===n?'border-color:var(--blue);color:var(--blue)':''}">${n}</button>`).join('')}
+    </span>`;
   document.getElementById('pag-top').innerHTML    = html;
   document.getElementById('pag-bottom').innerHTML = html;
 }
 
 function goPage(p) {
-  const total = Math.ceil(filtered.length / PAGE_SIZE) || 1;
-  currentPage = Math.max(1, Math.min(p, total));
+  const total = Math.ceil(filtered.length/pageSize)||1;
+  currentPage = Math.max(1,Math.min(p,total));
   render();
-  window.scrollTo({top: 0, behavior: 'smooth'});
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
-// ── CSV Export ────────────────────────────────────────────────────────────────
-function exportCSV() {
-  const cols = ['timestamp','run_id','status','vsrx_ip','zones','ips_added','ips_removed','new_zones','duration_s'];
-  const rows = [cols.join(',')];
+function setPageSize(n) {
+  pageSize = n;
+  currentPage = 1;
+  render();
+}
 
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+function toggleAutoRefresh() {
+  const btn   = document.getElementById('btn-auto');
+  const badge = document.getElementById('auto-badge');
+  if (autoTimer) {
+    clearInterval(autoTimer);
+    autoTimer = null;
+    btn.textContent   = 'Enable Auto-Refresh';
+    badge.style.display = 'none';
+  } else {
+    autoTimer = setInterval(()=>loadHistory(true), 30000);
+    btn.textContent     = 'Disable Auto-Refresh';
+    badge.style.display = 'inline-block';
+    showToast('Auto-refresh every 30s enabled');
+  }
+}
+
+// ── CSV Export (uses filtered set) ───────────────────────────────────────────
+function exportCSV() {
+  const cols=['timestamp','run_id','vsrx_ip','status','zones','ips_added','ips_removed','new_zones','duration_s','synthetic'];
+  const rows=[cols.join(',')];
   for (const e of filtered) {
-    const dmap  = e.delta_map || {};
-    const added = Object.values(dmap).flatMap(d => d.to_add    || []).join(';');
-    const remd  = Object.values(dmap).flatMap(d => d.to_remove || []).join(';');
+    const dmap  = e.delta_map||{};
+    const added = Object.values(dmap).flatMap(d=>d.to_add   ||[]).join(';');
+    const remd  = Object.values(dmap).flatMap(d=>d.to_remove||[]).join(';');
     rows.push([
       new Date((e.ts||0)*1000).toISOString(),
-      e.run_id  || '',
-      e.changed ? 'DRIFT' : 'CLEAN',
-      e.vsrx_ip || '',
+      e.run_id||'', e.vsrx_ip||'',
+      e.changed?'DRIFT':'CLEAN',
       Object.keys(dmap).join(';'),
-      added,
-      remd,
-      (e.new_zones||[]).join(';'),
-      e.duration_s != null ? e.duration_s.toFixed(1) : '',
-    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+      added, remd,
+      (e._nz||[]).join(';'),
+      e.duration_s!=null?e.duration_s.toFixed(1):'',
+      e.duration_s===2.5?'YES':'NO',
+    ].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
   }
-
-  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const blob = new Blob([rows.join('\r\n')],{type:'text/csv'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url;
+  a.href     = url;
   a.download = `sail-audit-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast(`Exported ${filtered.length} records as CSV`);
+  showToast('Exported '+filtered.length+' records');
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('hashchange', checkHashNav);
+// Initialise sort arrow on ts column
+const tsth = document.querySelector('th[data-col="ts"]');
+if (tsth) { tsth.classList.add('sorted'); tsth.querySelector('.sa').textContent='↓'; }
 loadHistory();
 </script>
 </body>
