@@ -505,7 +505,16 @@ function render() {
     const dur    = e.duration_s != null ? e.duration_s.toFixed(1) + 's' : '—';
     const drift  = e.changed;
     const dmap   = e.delta_map || {};
-    const nz     = e.new_zones || [];
+    let nz = e.new_zones || [];
+    if (typeof nz === 'string') {
+      try { 
+        // Convert Python/Ansible single-quote strings to valid JSON double-quotes
+        nz = JSON.parse(nz.replace(/'/g, '"')); 
+      } catch(err) { 
+        nz = []; 
+      }
+    }
+    if (!Array.isArray(nz)) nz = [];
 
     // Zones affected
     const zonesHtml = Object.keys(dmap).map(z => {
