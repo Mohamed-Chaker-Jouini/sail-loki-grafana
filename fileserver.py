@@ -156,9 +156,11 @@ class SAILHandler(http.server.BaseHTTPRequestHandler):
 
         elif p == "audit":
             try:
+                print(f"[DEBUG] Trying to look for audit file at: {AUDIT_HTML}", flush=True)
                 body = open(AUDIT_HTML, "rb").read()
                 self._send_html(200, body)
             except FileNotFoundError:
+                print(f"[ERROR] Failed to find audit file at: {AUDIT_HTML}", flush=True)
                 self._send_html(404, b"<h1>audit.html not found</h1>")
 
         elif p == "health":
@@ -211,7 +213,7 @@ class SAILHandler(http.server.BaseHTTPRequestHandler):
     # ── Suppress access log noise ─────────────────────────────────────────────
 
     def log_message(self, fmt, *args) -> None:
-        pass
+        print(f"[LOG] {self.address_string()} - {fmt%args}", flush=True)
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
