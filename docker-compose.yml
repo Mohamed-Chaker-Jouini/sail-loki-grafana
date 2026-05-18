@@ -35,6 +35,7 @@ services:
       - ./topology:/data:rw
       - ./fileserver.py:/app/fileserver.py:ro
       - ./audit.html:/app/audit.html:ro
+      - ./audit.js:/app/audit.js:ro
     ports:
       - "8880:80"
     restart: unless-stopped
