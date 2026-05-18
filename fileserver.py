@@ -162,7 +162,20 @@ class SAILHandler(http.server.BaseHTTPRequestHandler):
             except FileNotFoundError:
                 print(f"[ERROR] Failed to find audit file at: {AUDIT_HTML}", flush=True)
                 self._send_html(404, b"<h1>audit.html not found</h1>")
-
+        
+        elif p.endswith(".js"):
+            # js file in same dir as py fileserver
+            js_file_path = os.path.join(os.path.dirname(__file__),p)
+            try:
+                body = open(js_file_path, "rb").read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self._cors()
+                self.end_headers()
+                self.wfile.write(body)
+            except:
+                self._send_json(404, {"error": f"{p} not found"})
         elif p == "health":
             self._send_json(200, {
                 "status":          "ok",
