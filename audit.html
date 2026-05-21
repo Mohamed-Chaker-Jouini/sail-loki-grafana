@@ -6,137 +6,246 @@
 <title>SAIL — Drift Audit Log</title>
 <style>
   :root {
-    --bg:        #e9ecef;
-    --surface:   #ffffff;
-    --border:    #ced4da;
-    --text:      #212529;
-    --muted:     #6c757d;
-    --green:     #198754;
-    --red:       #dc3545;
-    --orange:    #d35400;
-    --blue:      #0056b3;
-    --blue-dark: #004085;
-    --purple:    #6f42c1;
-    --yellow:    #b8860b;
-    --header-bg: #f8f9fa;
-    --row-even:  #fafbfc;
-    --row-hover: #f1f3f5;
+    --hpe-green:     #01A982;
+    --hpe-green-dk:  #007B5E;
+    --hpe-green-lt:  #d6f5ee;
+    --hpe-dark:      #1A1A1A;
+    --hpe-charcoal:  #2E2E2E;
+    --hpe-mid:       #555555;
+    --bg:            #F2F2F2;
+    --surface:       #FFFFFF;
+    --border:        #D9D9D9;
+    --text:          #1A1A1A;
+    --muted:         #767676;
+    --red:           #C54E4B;
+    --red-lt:        #FDECEA;
+    --orange:        #CC4E00;
+    --purple:        #6B40A8;
+    --yellow:        #A8750A;
+    --header-bg:     #F7F7F7;
+    --row-even:      #FAFAFA;
+    --row-hover:     #EEF9F6;
   }
+
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;font-size:13px;min-height:100vh}
+  body{background:var(--bg);color:var(--text);font-family:"Metric","Arial",Helvetica,sans-serif;font-size:13px;min-height:100vh}
 
   /* ── Header ── */
-  header{background:var(--surface);border-bottom:3px solid var(--blue);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-  .logo{display:flex;align-items:center;gap:10px}
-  .logo-icon{width:36px;height:36px;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;color:#fff}
-  .logo-text h1{font-size:17px;font-weight:bold;color:var(--blue)}
-  .logo-text p{font-size:11px;color:var(--muted);margin-top:1px}
-  .header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .auto-badge{font-size:11px;font-weight:bold;color:var(--green);border:1px solid var(--green);padding:3px 8px;background:#d1e7dd}
-  #last-refresh{font-size:11px;font-weight:bold;color:var(--muted)}
+  header{
+    background:var(--hpe-dark);
+    border-bottom:3px solid var(--hpe-green);
+    padding:0 28px;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    min-height:64px;
+  }
+  .logo{display:flex;align-items:center;gap:20px;padding:12px 0}
+  .logo-divider{width:1px;height:36px;background:rgba(255,255,255,.25)}
+  .logo-app{display:flex;flex-direction:column;gap:2px}
+  .logo-app-name{font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:.02em}
+  .logo-app-sub{font-size:10px;color:rgba(255,255,255,.55);letter-spacing:.08em;text-transform:uppercase}
+  .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0}
+  .auto-badge{
+    font-size:10px;font-weight:700;color:var(--hpe-green);
+    border:1px solid var(--hpe-green);padding:3px 10px;background:rgba(1,169,130,.12);
+    letter-spacing:.06em;text-transform:uppercase
+  }
+  #last-refresh{font-size:10px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.05em}
 
   /* ── Buttons ── */
-  button{padding:6px 12px;border:1px solid var(--border);background:var(--header-bg);color:var(--text);cursor:pointer;font-size:12px;font-weight:bold;transition:background .12s,border-color .12s;white-space:nowrap;border-radius:0}
-  button:hover:not(:disabled){background:#e2e6ea;border-color:#adb5bd}
-  button:disabled{opacity:.45;cursor:default}
-  button.primary{background:var(--blue);border-color:var(--blue-dark);color:#fff}
-  button.primary:hover:not(:disabled){background:var(--blue-dark)}
-  button.danger{background:var(--red);border-color:#b02a37;color:#fff}
+  button{
+    padding:7px 14px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.08);color:#fff;cursor:pointer;
+    font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    transition:background .12s,border-color .12s;white-space:nowrap;border-radius:2px
+  }
+  button:hover:not(:disabled){background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.4)}
+  button:disabled{opacity:.35;cursor:default}
+  button.primary{background:var(--hpe-green);border-color:var(--hpe-green-dk);color:#fff}
+  button.primary:hover:not(:disabled){background:var(--hpe-green-dk)}
+  /* toolbar buttons (light bg) */
+  .toolbar button,.pag button,.page-size-wrap button{
+    background:var(--surface);border:1px solid var(--border);color:var(--text);
+    font-size:11px;font-weight:700;letter-spacing:.04em
+  }
+  .toolbar button:hover:not(:disabled),.pag button:hover:not(:disabled),.page-size-wrap button:hover:not(:disabled){
+    background:var(--hpe-green-lt);border-color:var(--hpe-green)
+  }
+  .pag button.primary,.toolbar button.primary{background:var(--hpe-green);border-color:var(--hpe-green-dk);color:#fff}
 
   /* ── Stats bar ── */
-  .stats-bar{display:flex;gap:0;background:var(--surface);border-bottom:1px solid var(--border)}
-  .stat{padding:12px 20px;border-right:1px solid var(--border);min-width:120px;flex:1}
+  .stats-bar{
+    display:flex;gap:0;background:var(--hpe-charcoal);
+    border-bottom:1px solid #3A3A3A
+  }
+  .stat{padding:14px 22px;border-right:1px solid #3A3A3A;min-width:120px;flex:1}
   .stat:last-child{border-right:none}
-  .stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:bold;letter-spacing:.04em}
-  .stat-value{font-size:24px;font-weight:bold;margin-top:3px;line-height:1}
-  .stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
+  .stat-label{font-size:9px;color:rgba(255,255,255,.5);text-transform:uppercase;font-weight:700;letter-spacing:.1em}
+  .stat-value{font-size:26px;font-weight:700;margin-top:4px;line-height:1;color:#fff}
+  .stat-sub{font-size:10px;color:rgba(255,255,255,.4);margin-top:3px}
 
-  /* ── Toolbar ── */
-  .toolbar{padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--header-bg);border-bottom:1px solid var(--border)}
-  .toolbar-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
-  label.fl{font-size:11px;font-weight:bold;color:var(--muted);margin-right:2px}
-  input[type=text],input[type=date],select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:5px 8px;font-size:12px;outline:none;border-radius:0}
-  input[type=text]:focus,input[type=date]:focus,select:focus{border-color:var(--blue)}
-  #f-search{width:210px}
-  input[type=date]{width:136px}
+  /* ── Filter panel ── */
+  .filter-panel{
+    background:var(--surface);
+    border-bottom:2px solid var(--border);
+    padding:14px 28px;
+    display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end
+  }
+  .filter-group{display:flex;flex-direction:column;gap:4px}
+  .filter-group label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+  .filter-row{display:flex;gap:6px;align-items:center}
+  input[type=text],input[type=date],select{
+    background:var(--surface);border:1px solid var(--border);color:var(--text);
+    padding:6px 10px;font-size:12px;outline:none;border-radius:2px;height:32px
+  }
+  input[type=text]:focus,input[type=date]:focus,select:focus{
+    border-color:var(--hpe-green);box-shadow:0 0 0 2px rgba(1,169,130,.15)
+  }
+  #f-search{width:220px}
+  input[type=date]{width:140px}
+  select{min-width:130px}
+  .filter-actions{display:flex;gap:8px;align-items:center;margin-left:auto;padding-bottom:0}
+  .filter-actions button{height:32px;padding:0 14px}
+  .filter-count{
+    font-size:11px;font-weight:700;color:var(--hpe-green);
+    background:var(--hpe-green-lt);border:1px solid var(--hpe-green);
+    padding:4px 10px;border-radius:2px;white-space:nowrap
+  }
 
   /* ── Table wrap ── */
-  .table-wrap{padding:20px 24px;overflow-x:auto}
+  .table-wrap{padding:20px 28px;overflow-x:auto}
   table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);font-size:12px}
-  thead tr{background:var(--header-bg)}
-  th{text-align:left;padding:9px 12px;border-bottom:2px solid var(--border);border-right:1px solid var(--border);font-size:11px;font-weight:bold;text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;color:var(--text)}
+  thead tr{background:var(--hpe-dark)}
+  th{
+    text-align:left;padding:10px 14px;
+    border-bottom:2px solid var(--hpe-green);border-right:1px solid #3A3A3A;
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+    white-space:nowrap;cursor:pointer;user-select:none;color:rgba(255,255,255,.85)
+  }
   th:last-child{border-right:none;cursor:default}
-  th:hover:not(.no-sort){background:#e9ecef}
-  th .sa{margin-left:4px;color:var(--border);font-size:10px}
-  th.sorted .sa{color:var(--blue)}
-  td{padding:9px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);vertical-align:top}
+  th:hover:not(.no-sort){background:var(--hpe-charcoal)}
+  th .sa{margin-left:5px;color:rgba(255,255,255,.3);font-size:10px}
+  th.sorted{color:#fff}
+  th.sorted .sa{color:var(--hpe-green)}
+  td{padding:10px 14px;border-bottom:1px solid var(--border);border-right:1px solid #EBEBEB;vertical-align:top}
   td:last-child{border-right:none}
   tr.data-row:nth-child(4n+3) td,tr.data-row:nth-child(4n+4) td{background:var(--row-even)}
   tr.data-row:hover td{background:var(--row-hover)!important}
 
   /* ── Badges ── */
-  .badge{display:inline-block;padding:3px 7px;font-size:10px;font-weight:bold;text-transform:uppercase;white-space:nowrap;border-radius:0}
-  .b-drift{background:var(--red);color:#fff;border:1px solid #b02a37}
-  .b-clean{background:var(--green);color:#fff;border:1px solid #146c43}
-  .b-zone{background:#e9ecef;color:var(--text);border:1px solid #adb5bd;margin:2px 2px 2px 0}
-  .b-new-zone{background:var(--orange);color:#fff;border:1px solid #b33900}
-  .b-synthetic{background:var(--yellow);color:#fff;border:1px solid #8a6600;font-size:9px;vertical-align:middle}
+  .badge{display:inline-block;padding:3px 8px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap;border-radius:2px;letter-spacing:.04em}
+  .b-drift{background:var(--red);color:#fff;border:1px solid #A03C3A}
+  .b-clean{background:var(--hpe-green);color:#fff;border:1px solid var(--hpe-green-dk)}
+  .b-zone{background:#EFEFEF;color:var(--hpe-charcoal);border:1px solid #CCCCCC;margin:2px 2px 2px 0;font-size:10px}
+  .b-new-zone{background:var(--orange);color:#fff;border:1px solid #A33D00}
 
   /* ── Delta chips ── */
   .delta-block{margin-bottom:6px}
   .delta-block:last-child{margin-bottom:0}
-  .delta-zname{font-size:10px;font-weight:bold;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+  .delta-zname{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
   .chips{display:flex;flex-wrap:wrap;gap:3px}
-  .chip{font-size:11px;padding:2px 7px;font-family:"Courier New",Courier,monospace;font-weight:bold;border-radius:0}
-  .chip.add{background:#d1e7dd;color:#0f5132;border:1px solid #a3cfbb}
-  .chip.rem{background:#f8d7da;color:#842029;border:1px solid #f1aeb5}
+  .chip{font-size:11px;padding:2px 8px;font-family:"Courier New",Courier,monospace;font-weight:700;border-radius:2px}
+  .chip.add{background:var(--hpe-green-lt);color:var(--hpe-green-dk);border:1px solid #9FDECE}
+  .chip.rem{background:var(--red-lt);color:#922020;border:1px solid #EDBBBA}
 
   /* ── Detail row ── */
   tr.detail-row{display:none}
   tr.detail-row.open{display:table-row}
-  .detail-cell{padding:16px 24px;background:#f8f9fa!important;border-bottom:2px solid var(--border)}
-  .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:14px}
-  .di label{font-size:10px;font-weight:bold;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:3px}
-  .di span{font-size:12px;font-family:"Courier New",Courier,monospace;background:#fff;padding:2px 5px;border:1px solid #dee2e6;display:inline-block;word-break:break-all}
-  .raw-section{margin-top:10px}
-  .raw-toggle{font-size:11px;color:var(--blue);cursor:pointer;border:none;background:none;padding:0;font-weight:bold;text-decoration:underline}
-  .raw-pre{display:none;margin-top:8px;background:#fff;border:1px solid var(--border);padding:10px;font-size:11px;font-family:"Courier New",Courier,monospace;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;color:var(--text)}
+  .detail-cell{
+    padding:20px 28px;
+    background:#F9FFFE!important;
+    border-bottom:2px solid var(--border);
+    border-top:1px solid var(--hpe-green-lt)
+  }
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+  .di label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
+  .di span{
+    font-size:12px;font-family:"Courier New",Courier,monospace;
+    background:#fff;padding:3px 7px;border:1px solid var(--border);
+    display:inline-block;word-break:break-all;border-radius:2px
+  }
+  .raw-section{margin-top:12px}
+  .raw-toggle{
+    font-size:11px;color:var(--hpe-green);cursor:pointer;border:none;background:none;
+    padding:0;font-weight:700;text-decoration:none;letter-spacing:.03em;text-transform:uppercase
+  }
+  .raw-toggle:hover{text-decoration:underline}
+  .raw-pre{
+    display:none;margin-top:8px;background:#fff;border:1px solid var(--border);
+    padding:12px;font-size:11px;font-family:"Courier New",Courier,monospace;
+    white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;
+    color:var(--text);border-radius:2px
+  }
   .raw-pre.open{display:block}
+
+  /* ── Expand button ── */
+  .expand-btn{
+    background:none!important;border:1px solid var(--border)!important;
+    color:var(--hpe-green)!important;font-size:12px!important;padding:4px 8px!important;
+    border-radius:2px!important
+  }
+  .expand-btn:hover:not(:disabled){background:var(--hpe-green-lt)!important;border-color:var(--hpe-green)!important}
 
   /* ── Empty / loading ── */
   .empty{text-align:center;padding:60px 24px;color:var(--muted);background:var(--surface);border:1px solid var(--border)}
   .empty-icon{font-size:40px;margin-bottom:12px}
-  .loading{text-align:center;padding:40px;color:var(--muted);font-weight:bold;font-size:13px}
+  .loading{text-align:center;padding:40px;color:var(--hpe-green);font-weight:700;font-size:13px;letter-spacing:.04em}
 
   /* ── Pagination ── */
-  .pag{display:flex;align-items:center;justify-content:space-between;padding:8px 24px 16px;flex-wrap:wrap;gap:8px}
+  .pag{display:flex;align-items:center;justify-content:space-between;padding:10px 28px 16px;flex-wrap:wrap;gap:8px}
   .pag-center{display:flex;align-items:center;gap:6px}
-  .pag-info{font-size:12px;font-weight:bold;color:var(--muted);min-width:180px;text-align:center}
-  .page-size-wrap{font-size:12px;color:var(--muted);font-weight:bold}
+  .pag-info{
+    font-size:11px;font-weight:700;color:var(--muted);min-width:200px;text-align:center;
+    letter-spacing:.04em;text-transform:uppercase
+  }
+  .page-size-wrap{font-size:11px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.04em}
+  .page-size-wrap button{height:28px;padding:0 10px}
+  .page-size-wrap button.active{border-color:var(--hpe-green)!important;color:var(--hpe-green)!important;background:var(--hpe-green-lt)!important}
 
   /* ── Connection error banner ── */
-  #err-banner{display:none;background:#f8d7da;border:1px solid #f1aeb5;color:#842029;padding:10px 24px;font-size:12px;font-weight:bold}
+  #err-banner{
+    display:none;background:var(--red-lt);border-bottom:2px solid var(--red);
+    color:#7A2020;padding:10px 28px;font-size:12px;font-weight:700
+  }
 
   /* ── Toast ── */
-  #toast{position:fixed;bottom:24px;right:24px;background:#343a40;color:#fff;border:1px solid #212529;padding:11px 16px;font-size:12px;font-weight:bold;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9999}
+  #toast{
+    position:fixed;bottom:24px;right:24px;
+    background:var(--hpe-dark);color:#fff;border-left:3px solid var(--hpe-green);
+    padding:12px 18px;font-size:12px;font-weight:700;opacity:0;
+    transition:opacity .25s;pointer-events:none;z-index:9999;
+    border-radius:2px;letter-spacing:.03em
+  }
   #toast.show{opacity:1}
 
   /* ── Hash highlight ── */
-  tr.data-row.hl td{background:#fff3cd!important;outline:2px solid var(--yellow)}
+  tr.data-row.hl td{background:#FFF9E6!important;outline:2px solid var(--yellow)}
+
+  /* ── HPE logo SVG inline styling ── */
+  .hpe-logo-img{height:28px;width:auto;filter:brightness(0) invert(1)}
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo">
-    <div class="logo-icon">S</div>
-    <div class="logo-text">
-      <h1>SAIL Drift Audit Log</h1>
-      <p>SRX / Morpheus Reconciliation History</p>
+    <img
+      class="hpe-logo-img"
+      src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Hewlett_Packard_Enterprise_logo_2025_expanded.svg/320px-Hewlett_Packard_Enterprise_logo_2025_expanded.svg.png"
+      alt="Hewlett Packard Enterprise"
+      onerror="this.style.display='none';document.getElementById('hpe-fallback').style.display='flex'"
+    >
+    <!-- Fallback text logo if image fails -->
+    <div id="hpe-fallback" style="display:none;flex-direction:column;gap:1px">
+      <span style="font-size:11px;font-weight:700;color:var(--hpe-green);letter-spacing:.06em;text-transform:uppercase">Hewlett Packard Enterprise</span>
+    </div>
+    <div class="logo-divider"></div>
+    <div class="logo-app">
+      <span class="logo-app-name">SAIL Drift Audit</span>
+      <span class="logo-app-sub">SRX / Morpheus Reconciliation</span>
     </div>
   </div>
   <div class="header-right">
-    <span id="auto-badge" class="auto-badge" style="display:none">● AUTO-REFRESH 30s</span>
+    <span id="auto-badge" class="auto-badge" style="display:none">● Auto-Refresh 30s</span>
     <span id="last-refresh"></span>
     <button onclick="toggleAutoRefresh()" id="btn-auto">Enable Auto-Refresh</button>
     <button onclick="loadHistory()">↻ Refresh</button>
@@ -147,36 +256,77 @@
 <div id="err-banner">⚠ Could not reach the fileserver. Retrying… — <span id="err-detail"></span></div>
 
 <div class="stats-bar">
-  <div class="stat"><div class="stat-label">Total Runs</div><div class="stat-value" id="s-total">—</div><div class="stat-sub" id="s-total-sub"></div></div>
-  <div class="stat"><div class="stat-label">Drift Events</div><div class="stat-value" style="color:var(--red)" id="s-drift">—</div><div class="stat-sub" id="s-drift-sub"></div></div>
-  <div class="stat"><div class="stat-label">IPs Added</div><div class="stat-value" style="color:var(--green)" id="s-add">—</div><div class="stat-sub" id="s-add-sub"></div></div>
-  <div class="stat"><div class="stat-label">IPs Removed</div><div class="stat-value" style="color:var(--orange)" id="s-rem">—</div><div class="stat-sub" id="s-rem-sub"></div></div>
-  <div class="stat"><div class="stat-label">New Zones</div><div class="stat-value" style="color:var(--purple)" id="s-zones">—</div><div class="stat-sub" id="s-zones-sub"></div></div>
-  <div class="stat"><div class="stat-label">Retention</div><div class="stat-value" style="font-size:15px;padding-top:5px" id="s-ret">—</div><div class="stat-sub" id="s-ret-sub">records kept</div></div>
+  <div class="stat">
+    <div class="stat-label">Total Runs</div>
+    <div class="stat-value" id="s-total">—</div>
+    <div class="stat-sub" id="s-total-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Drift Events</div>
+    <div class="stat-value" style="color:#FF6B6B" id="s-drift">—</div>
+    <div class="stat-sub" id="s-drift-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">IPs Added</div>
+    <div class="stat-value" style="color:var(--hpe-green)" id="s-add">—</div>
+    <div class="stat-sub" id="s-add-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">IPs Removed</div>
+    <div class="stat-value" style="color:#FF9966" id="s-rem">—</div>
+    <div class="stat-sub" id="s-rem-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">New Zones</div>
+    <div class="stat-value" style="color:#A88DDB" id="s-zones">—</div>
+    <div class="stat-sub" id="s-zones-sub"></div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Retention</div>
+    <div class="stat-value" style="font-size:15px;padding-top:6px;color:rgba(255,255,255,.7)" id="s-ret">—</div>
+    <div class="stat-sub" id="s-ret-sub">records kept</div>
+  </div>
 </div>
 
-<div class="toolbar">
-  <label class="fl">Search:</label>
-  <input type="text" id="f-search" placeholder="IP, zone, run ID…" oninput="applyFilters()">
-  <div class="toolbar-sep"></div>
-  <label class="fl">Status:</label>
-  <select id="f-type" onchange="applyFilters()">
-    <option value="">All</option>
-    <option value="drift">Drift only</option>
-    <option value="clean">Clean only</option>
-  </select>
-  <label class="fl">Zone:</label>
-  <select id="f-zone" onchange="applyFilters()"></select>
-  <div class="toolbar-sep"></div>
-  <label class="fl">From:</label>
-  <input type="date" id="f-from" onchange="applyFilters()">
-  <label class="fl">To:</label>
-  <input type="date" id="f-to" onchange="applyFilters()">
-  <div class="toolbar-sep"></div>
-  <button onclick="clearFilters()">✕ Clear Filters</button>
+<!-- ── Filter Panel ── -->
+<div class="filter-panel">
+  <div class="filter-group">
+    <label>Search</label>
+    <div class="filter-row">
+      <input type="text" id="f-search" placeholder="IP address, zone, run ID…" oninput="applyFilters()" style="width:240px">
+    </div>
+  </div>
+
+  <div class="filter-group">
+    <label>Status</label>
+    <select id="f-type" onchange="applyFilters()">
+      <option value="">All statuses</option>
+      <option value="drift">Drift only</option>
+      <option value="clean">Clean only</option>
+    </select>
+  </div>
+
+  <div class="filter-group">
+    <label>Zone</label>
+    <select id="f-zone" onchange="applyFilters()"></select>
+  </div>
+
+  <div class="filter-group">
+    <label>Date Range</label>
+    <div class="filter-row">
+      <input type="date" id="f-from" onchange="applyFilters()" title="From date">
+      <span style="color:var(--muted);font-size:11px;font-weight:700;padding:0 2px">→</span>
+      <input type="date" id="f-to" onchange="applyFilters()" title="To date">
+    </div>
+  </div>
+
+  <div class="filter-actions">
+    <span id="filter-count" class="filter-count" style="display:none"></span>
+    <button onclick="clearFilters()">✕ Clear Filters</button>
+  </div>
 </div>
 
-<div id="loading-indicator" class="loading" style="display:none">Loading audit records…</div>
+<div id="loading-indicator" class="loading" style="display:none">● Loading audit records…</div>
 
 <div class="pag" id="pag-top"></div>
 
@@ -184,13 +334,12 @@
   <table id="audit-table">
     <thead>
       <tr>
-        <th data-col="ts"       onclick="sortBy('ts')">Timestamp <span class="sa">↕</span></th>
-        <th data-col="run_id"   onclick="sortBy('run_id')">Run ID <span class="sa">↕</span></th>
-        <th data-col="vsrx_ip"  onclick="sortBy('vsrx_ip')">vSRX <span class="sa">↕</span></th>
-        <th data-col="status"   onclick="sortBy('status')">Status <span class="sa">↕</span></th>
+        <th data-col="ts"      onclick="sortBy('ts')">Timestamp <span class="sa">↕</span></th>
+        <th data-col="run_id"  onclick="sortBy('run_id')">Run ID <span class="sa">↕</span></th>
+        <th data-col="vsrx_ip" onclick="sortBy('vsrx_ip')">vSRX IP <span class="sa">↕</span></th>
+        <th data-col="status"  onclick="sortBy('status')">Status <span class="sa">↕</span></th>
         <th class="no-sort">Zones</th>
         <th class="no-sort">Delta</th>
-        <th data-col="duration" onclick="sortBy('duration')">Duration <span class="sa">↕</span></th>
         <th class="no-sort">▸</th>
       </tr>
     </thead>

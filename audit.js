@@ -7,29 +7,23 @@ const PAGE_SIZES  = [25, 50, 100];
 let allEntries  = [];
 let filtered    = [];
 let sortCol     = 'ts';
-let sortDir     = -1;
+let sortDir     = -1;          // -1 = descending → newest first by default
 let currentPage = 1;
 let pageSize    = 25;
-let openRows    = new Set();   // keyed by run_id+ts (stable)
+let openRows    = new Set();
 let autoTimer   = null;
 let isLoading   = false;
 let maxHistory  = 1000;
 
 // ── Robust new_zones parser ───────────────────────────────────────────────────
-// Handles: real JSON array, Python repr string, already-array, undefined
 function parseNewZones(raw) {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
   if (typeof raw !== 'string') return [];
   const s = raw.trim();
   if (!s || s === '[]') return [];
-  // Try JSON first
   try { return JSON.parse(s); } catch(_) {}
-  // Python repr: ['ZONE1', 'ZONE2'] or ["ZONE1"]
-  try {
-    return JSON.parse(s.replace(/'/g, '"'));
-  } catch(_) {}
-  // Last resort: strip brackets, split on comma, trim quotes/spaces
+  try { return JSON.parse(s.replace(/'/g, '"')); } catch(_) {}
   return s.replace(/^\[|\]$/g,'').split(',')
           .map(t => t.trim().replace(/^['"]|['"]$/g,''))
           .filter(Boolean);
@@ -54,7 +48,6 @@ async function loadHistory(silent=false) {
     if (!histRes.ok) throw new Error(`HTTP ${histRes.status}`);
 
     allEntries = await histRes.json();
-    // Normalise every entry once on load
     allEntries.forEach(e => { e._nz = parseNewZones(e.new_zones); });
 
     const health = await healthRes.json().catch(() => ({}));
@@ -62,10 +55,10 @@ async function loadHistory(silent=false) {
 
     document.getElementById('err-banner').style.display = 'none';
     document.getElementById('last-refresh').textContent =
-      'LAST UPDATED: ' + new Date().toLocaleTimeString().toUpperCase();
+      'Updated: ' + new Date().toLocaleTimeString().toUpperCase();
 
     populateZoneFilter();
-    applyFilters();          // also calls computeStats() on filtered set
+    applyFilters();
     checkHashNav();
 
   } catch(e) {
@@ -78,7 +71,7 @@ async function loadHistory(silent=false) {
   }
 }
 
-// ── Stats (computed on filtered set) ─────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────────
 function computeStats(src) {
   let drifts=0, added=0, removed=0, newZ=0;
   for (const e of src) {
@@ -94,14 +87,14 @@ function computeStats(src) {
 
   set('s-total', tot);
   set('s-total-sub', 'of ' + allEntries.length + ' total');
-  set('s-drift', drifts);     set('s-drift-sub', pct(drifts)  + ' of shown');
-  set('s-add',   added);      set('s-add-sub',   added   + ' IPs');
-  set('s-rem',   removed);    set('s-rem-sub',   removed + ' IPs');
-  set('s-zones', newZ);       set('s-zones-sub', 'discovered');
+  set('s-drift', drifts);    set('s-drift-sub', pct(drifts)  + ' of shown');
+  set('s-add',   added);     set('s-add-sub',   added   + ' IPs');
+  set('s-rem',   removed);   set('s-rem-sub',   removed + ' IPs');
+  set('s-zones', newZ);      set('s-zones-sub', 'discovered');
   set('s-ret',   allEntries.length + ' / ' + maxHistory);
 }
 
-function set(id, v) { const el=document.getElementById(id); if(el) el.textContent=v; }
+function set(id, v) { const el=document.getElementById(id); if(el) el.textContent=String(v); }
 
 // ── Zone filter ───────────────────────────────────────────────────────────────
 function populateZoneFilter() {
@@ -150,7 +143,20 @@ function applyFilters() {
   sortFiltered();
   currentPage = 1;
   computeStats(filtered);
+  updateFilterCount(q, type, zone, from, to);
   render();
+}
+
+function updateFilterCount(q, type, zone, from, to) {
+  const el = document.getElementById('filter-count');
+  if (!el) return;
+  const active = [q, type, zone, from, to].filter(Boolean).length;
+  if (active > 0 && filtered.length !== allEntries.length) {
+    el.textContent = filtered.length + ' of ' + allEntries.length + ' records';
+    el.style.display = 'inline-block';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function clearFilters() {
@@ -176,8 +182,7 @@ function sortBy(col) {
 function sortFiltered() {
   filtered.sort((a,b) => {
     let av, bv;
-    if (sortCol==='status')   { av=a.changed?1:0;     bv=b.changed?1:0; }
-    else if (sortCol==='duration') { av=a.duration_s??-1; bv=b.duration_s??-1; }
+    if (sortCol==='status') { av=a.changed?1:0; bv=b.changed?1:0; }
     else { av=a[sortCol]??''; bv=b[sortCol]??''; }
     if (typeof av==='string') { av=av.toLowerCase(); bv=bv.toLowerCase(); }
     return av<bv ? sortDir : av>bv ? -sortDir : 0;
@@ -211,8 +216,6 @@ function render() {
   for (const e of page) {
     const rk     = rowKey(e);
     const ts     = e.ts ? new Date(e.ts*1000).toLocaleString() : '—';
-    const dur    = e.duration_s!=null ? e.duration_s.toFixed(1)+'s' : '—';
-    const synth  = e.duration_s===2.5;   // flagged as synthetic
     const dmap   = e.delta_map||{};
     const nz     = e._nz||[];
     const isOpen = openRows.has(rk);
@@ -223,7 +226,7 @@ function render() {
       ? zoneKeys.map(z => `<span class="badge b-zone">${z}</span>`).join('')
       : '<span style="color:var(--muted)">—</span>';
 
-    // Delta cell — only rendered when there are actual changes
+    // Delta cell
     let deltaHtml = '';
     for (const [z,d] of Object.entries(dmap)) {
       const adds = d.to_add||[], rems=d.to_remove||[];
@@ -242,24 +245,20 @@ function render() {
       deltaHtml = '<span style="color:var(--muted);font-style:italic">New zone only — no IP deltas</span>';
     }
 
-    // Main row
     const tr = document.createElement('tr');
     tr.className = 'data-row';
     tr.id = rk;
     tr.innerHTML = `
-      <td style="white-space:nowrap;font-family:'Courier New',monospace">${ts}</td>
-      <td style="font-family:'Courier New',monospace;color:var(--blue)" title="${esc(e.run_id||'')}">
+      <td style="white-space:nowrap;font-family:'Courier New',monospace;font-size:12px">${ts}</td>
+      <td style="font-family:'Courier New',monospace;color:var(--hpe-green)" title="${esc(e.run_id||'')}">
         <a href="#${esc(rk)}" onclick="return false;" style="color:inherit;text-decoration:none">${esc((e.run_id||'—').slice(0,14))}</a>
       </td>
       <td style="font-family:'Courier New',monospace">${esc(e.vsrx_ip||'—')}</td>
       <td><span class="badge ${e.changed?'b-drift':'b-clean'}">${e.changed?'DRIFT':'CLEAN'}</span></td>
       <td>${zonesHtml}</td>
       <td>${deltaHtml || '<span style="color:var(--muted)">—</span>'}</td>
-      <td style="white-space:nowrap">
-        ${dur}${synth?` <span class="badge b-synthetic" title="Duration hardcoded in playbook">SYNTH</span>`:''}
-      </td>
       <td>
-        <button onclick="toggleDetail('${rk}')" id="btn-${rk}">${isOpen?'▲':'▼'}</button>
+        <button class="expand-btn" onclick="toggleDetail('${rk}')" id="btn-${rk}">${isOpen?'▲':'▼'}</button>
       </td>`;
     tbody.appendChild(tr);
 
@@ -270,7 +269,7 @@ function render() {
     det.className = 'detail-row' + (isOpen?' open':'');
     det.id = 'det-'+rk;
     det.innerHTML = `
-      <td colspan="8" class="detail-cell">
+      <td colspan="7" class="detail-cell">
         <div class="detail-grid">
           <div class="di"><label>Full Run ID</label><span>${esc(e.run_id||'—')}</span></div>
           <div class="di"><label>Unix Timestamp</label><span>${e.ts||'—'}</span></div>
@@ -279,7 +278,6 @@ function render() {
           <div class="di"><label>New Zones</label><span>${nz.join(', ')||'none'}</span></div>
           <div class="di"><label>IPs Added (${ipAdded.length})</label><span>${ipAdded.join(', ')||'none'}</span></div>
           <div class="di"><label>IPs Removed (${ipRemoved.length})</label><span>${ipRemoved.join(', ')||'none'}</span></div>
-          <div class="di"><label>Duration</label><span>${dur}${synth?' ⚠ synthetic':''}</span></div>
         </div>
         <div class="raw-section">
           <button class="raw-toggle" onclick="toggleRaw('raw-${rk}')">{ } View raw delta_map JSON</button>
@@ -290,7 +288,6 @@ function render() {
   }
 
   renderPag();
-  // Re-highlight if hash is set
   const hash = location.hash.slice(1);
   if (hash) highlight(hash);
 }
@@ -318,7 +315,6 @@ function highlight(rk) {
 function checkHashNav() {
   const hash = location.hash.slice(1);
   if (!hash) return;
-  // Find which page it's on
   const idx = filtered.findIndex(e => rowKey(e)===hash);
   if (idx===-1) return;
   const pg = Math.floor(idx/pageSize)+1;
@@ -329,30 +325,30 @@ function checkHashNav() {
 // ── Pagination ────────────────────────────────────────────────────────────────
 function renderPag() {
   const total = Math.ceil(filtered.length/pageSize)||1;
-  const info  = `PAGE ${currentPage} OF ${total} — ${filtered.length} RECORDS`;
-  const html  = `
-    <button onclick="goPage(1)"            ${currentPage<=1?'disabled':''}>«</button>
-    <button onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>‹ PREV</button>
+  const info  = `Page ${currentPage} of ${total} — ${filtered.length} records`;
+  const sizeBtns = PAGE_SIZES.map(n =>
+    `<button onclick="setPageSize(${n})" class="${pageSize===n?'active':''}">${n}</button>`
+  ).join('');
+  const html = `
+    <button onclick="goPage(1)"                ${currentPage<=1?'disabled':''}>«</button>
+    <button onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>‹ Prev</button>
     <span class="pag-info">${info}</span>
-    <button onclick="goPage(${currentPage+1})" ${currentPage>=total?'disabled':''}>NEXT ›</button>
-    <button onclick="goPage(${total})"     ${currentPage>=total?'disabled':''}>»</button>
-    <span class="page-size-wrap">
-      Show:
-      ${PAGE_SIZES.map(n=>`<button onclick="setPageSize(${n})" style="${pageSize===n?'border-color:var(--blue);color:var(--blue)':''}">${n}</button>`).join('')}
-    </span>`;
+    <button onclick="goPage(${currentPage+1})" ${currentPage>=total?'disabled':''}>Next ›</button>
+    <button onclick="goPage(${total})"         ${currentPage>=total?'disabled':''}>»</button>
+    <span class="page-size-wrap">Show: ${sizeBtns}</span>`;
   document.getElementById('pag-top').innerHTML    = html;
   document.getElementById('pag-bottom').innerHTML = html;
 }
 
 function goPage(p) {
   const total = Math.ceil(filtered.length/pageSize)||1;
-  currentPage = Math.max(1,Math.min(p,total));
+  currentPage = Math.max(1, Math.min(p, total));
   render();
-  window.scrollTo({top:0,behavior:'smooth'});
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 function setPageSize(n) {
-  pageSize = n;
+  pageSize    = n;
   currentPage = 1;
   render();
 }
@@ -364,20 +360,20 @@ function toggleAutoRefresh() {
   if (autoTimer) {
     clearInterval(autoTimer);
     autoTimer = null;
-    btn.textContent   = 'Enable Auto-Refresh';
+    btn.textContent     = 'Enable Auto-Refresh';
     badge.style.display = 'none';
   } else {
-    autoTimer = setInterval(()=>loadHistory(true), 30000);
+    autoTimer = setInterval(() => loadHistory(true), 30000);
     btn.textContent     = 'Disable Auto-Refresh';
     badge.style.display = 'inline-block';
     showToast('Auto-refresh every 30s enabled');
   }
 }
 
-// ── CSV Export (uses filtered set) ───────────────────────────────────────────
+// ── CSV Export ────────────────────────────────────────────────────────────────
 function exportCSV() {
-  const cols=['timestamp','run_id','vsrx_ip','status','zones','ips_added','ips_removed','new_zones','duration_s','synthetic'];
-  const rows=[cols.join(',')];
+  const cols = ['timestamp','run_id','vsrx_ip','status','zones','ips_added','ips_removed','new_zones'];
+  const rows = [cols.join(',')];
   for (const e of filtered) {
     const dmap  = e.delta_map||{};
     const added = Object.values(dmap).flatMap(d=>d.to_add   ||[]).join(';');
@@ -389,51 +385,52 @@ function exportCSV() {
       Object.keys(dmap).join(';'),
       added, remd,
       (e._nz||[]).join(';'),
-      e.duration_s!=null?e.duration_s.toFixed(1):'',
-      e.duration_s===2.5?'YES':'NO',
     ].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
   }
-  const blob = new Blob([rows.join('\r\n')],{type:'text/csv'});
+  const blob = new Blob([rows.join('\r\n')], {type:'text/csv'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
   a.download = `sail-audit-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Exported '+filtered.length+' records');
+  showToast('Exported ' + filtered.length + ' records');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function showToast(msg) {
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),3000);
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   window.addEventListener('hashchange', checkHashNav);
-  
-  // Initialise sort arrow on ts column
+
+  // Set initial sort arrow — ts descending (newest first)
   const tsth = document.querySelector('th[data-col="ts"]');
-  if (tsth) { 
-    tsth.classList.add('sorted'); 
-    tsth.querySelector('.sa').textContent='↓'; 
+  if (tsth) {
+    tsth.classList.add('sorted');
+    tsth.querySelector('.sa').textContent = '↓';
   }
-  
+
   loadHistory();
 }
 
-// ── TEST EXPORTS ──────────────────────────────────────────────────────────────
+// ── Test exports ──────────────────────────────────────────────────────────────
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { 
-    parseNewZones, rowKey, esc, computeStats, applyFilters, 
+  module.exports = {
+    parseNewZones, rowKey, esc, computeStats, applyFilters,
     loadHistory, sortBy, toggleAutoRefresh,
     setAllEntries: (entries) => { allEntries = entries; },
-    getFiltered: () => filtered
+    getFiltered: () => filtered,
   };
 }
