@@ -190,6 +190,17 @@ function sortFiltered() {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
+// Sentinel values that mean "no real run ID was set"
+const JUNK_RUN_IDS = new Set(['all','ALL','none','null','undefined','']);
+
+function displayRunId(e) {
+  if (!e.run_id || JUNK_RUN_IDS.has(String(e.run_id).trim())) {
+    // Fall back to a timestamp-derived short ID, e.g. "RUN-17462F3A"
+    return e.ts ? 'RUN-' + e.ts.toString(16).toUpperCase() : '—';
+  }
+  return String(e.run_id);
+}
+
 function rowKey(e) {
   return 'r-' + String(e.ts||'0') + '-' + String(e.run_id||'x').replace(/[^a-z0-9]/gi,'-');
 }
@@ -216,6 +227,7 @@ function render() {
   for (const e of page) {
     const rk     = rowKey(e);
     const ts     = e.ts ? new Date(e.ts*1000).toLocaleString() : '—';
+    const runId  = displayRunId(e);
     const dmap   = e.delta_map||{};
     const nz     = e._nz||[];
     const isOpen = openRows.has(rk);
@@ -250,8 +262,8 @@ function render() {
     tr.id = rk;
     tr.innerHTML = `
       <td style="white-space:nowrap;font-family:'Courier New',monospace;font-size:12px">${ts}</td>
-      <td style="font-family:'Courier New',monospace;color:var(--hpe-green)" title="${esc(e.run_id||'')}">
-        <a href="#${esc(rk)}" onclick="return false;" style="color:inherit;text-decoration:none">${esc((e.run_id||'—').slice(0,14))}</a>
+      <td style="font-family:'Courier New',monospace;color:var(--hpe-green)" title="${esc(e.run_id||runId)}">
+        <a href="#${esc(rk)}" onclick="return false;" style="color:inherit;text-decoration:none">${esc(runId.slice(0,14))}</a>
       </td>
       <td style="font-family:'Courier New',monospace">${esc(e.vsrx_ip||'—')}</td>
       <td><span class="badge ${e.changed?'b-drift':'b-clean'}">${e.changed?'DRIFT':'CLEAN'}</span></td>
@@ -271,7 +283,7 @@ function render() {
     det.innerHTML = `
       <td colspan="7" class="detail-cell">
         <div class="detail-grid">
-          <div class="di"><label>Full Run ID</label><span>${esc(e.run_id||'—')}</span></div>
+          <div class="di"><label>Full Run ID</label><span>${esc(runId)}${e.run_id && !JUNK_RUN_IDS.has(String(e.run_id).trim()) ? '' : ' <em style="color:var(--muted);font-style:italic;font-size:10px">(derived from ts)</em>'}</span></div>
           <div class="di"><label>Unix Timestamp</label><span>${e.ts||'—'}</span></div>
           <div class="di"><label>vSRX IP</label><span>${esc(e.vsrx_ip||'—')}</span></div>
           <div class="di"><label>Zones in Run</label><span>${zoneKeys.join(', ')||'none'}</span></div>
