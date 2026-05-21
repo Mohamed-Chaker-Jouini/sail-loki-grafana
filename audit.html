@@ -8,23 +8,24 @@
   :root {
     --hpe-green:     #01A982;
     --hpe-green-dk:  #007B5E;
-    --hpe-green-lt:  #d6f5ee;
-    --hpe-dark:      #1A1A1A;
-    --hpe-charcoal:  #2E2E2E;
-    --hpe-mid:       #555555;
-    --bg:            #F2F2F2;
+    --hpe-green-lt:  #E6F7F3;
+    --hpe-green-mid: #B3E8DA;
+    --bg:            #F5F7F7;
     --surface:       #FFFFFF;
-    --border:        #D9D9D9;
+    --border:        #D5DCD9;
+    --border-lt:     #E8EDEB;
     --text:          #1A1A1A;
-    --muted:         #767676;
+    --text-2:        #444444;
+    --muted:         #6B7775;
     --red:           #C54E4B;
     --red-lt:        #FDECEA;
     --orange:        #CC4E00;
     --purple:        #6B40A8;
     --yellow:        #A8750A;
-    --header-bg:     #F7F7F7;
-    --row-even:      #FAFAFA;
-    --row-hover:     #EEF9F6;
+    --header-bg:     #FFFFFF;
+    --stats-bg:      #F0FAF7;
+    --row-even:      #FAFCFB;
+    --row-hover:     #EEF9F5;
   }
 
   *{box-sizing:border-box;margin:0;padding:0}
@@ -32,63 +33,58 @@
 
   /* ── Header ── */
   header{
-    background:var(--hpe-dark);
+    background:var(--header-bg);
     border-bottom:3px solid var(--hpe-green);
     padding:0 28px;
     display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
     min-height:64px;
+    box-shadow:0 2px 8px rgba(1,169,130,.10);
   }
-  .logo{display:flex;align-items:center;gap:20px;padding:12px 0}
-  .logo-divider{width:1px;height:36px;background:rgba(255,255,255,.25)}
+  .logo{display:flex;align-items:center;gap:18px;padding:12px 0}
+  .logo-divider{width:1px;height:36px;background:var(--border)}
   .logo-app{display:flex;flex-direction:column;gap:2px}
-  .logo-app-name{font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:.02em}
-  .logo-app-sub{font-size:10px;color:rgba(255,255,255,.55);letter-spacing:.08em;text-transform:uppercase}
+  .logo-app-name{font-size:15px;font-weight:700;color:var(--text);letter-spacing:.01em}
+  .logo-app-sub{font-size:10px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}
   .header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0}
   .auto-badge{
     font-size:10px;font-weight:700;color:var(--hpe-green);
-    border:1px solid var(--hpe-green);padding:3px 10px;background:rgba(1,169,130,.12);
-    letter-spacing:.06em;text-transform:uppercase
+    border:1px solid var(--hpe-green);padding:3px 10px;
+    background:var(--hpe-green-lt);letter-spacing:.06em;text-transform:uppercase;
+    border-radius:2px
   }
-  #last-refresh{font-size:10px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.05em}
+  #last-refresh{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em}
 
   /* ── Buttons ── */
   button{
-    padding:7px 14px;border:1px solid rgba(255,255,255,.2);
-    background:rgba(255,255,255,.08);color:#fff;cursor:pointer;
-    font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-    transition:background .12s,border-color .12s;white-space:nowrap;border-radius:2px
+    padding:7px 14px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-2);cursor:pointer;
+    font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    transition:background .12s,border-color .12s,color .12s;
+    white-space:nowrap;border-radius:2px
   }
-  button:hover:not(:disabled){background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.4)}
-  button:disabled{opacity:.35;cursor:default}
+  button:hover:not(:disabled){background:var(--hpe-green-lt);border-color:var(--hpe-green);color:var(--hpe-green-dk)}
+  button:disabled{opacity:.4;cursor:default}
   button.primary{background:var(--hpe-green);border-color:var(--hpe-green-dk);color:#fff}
-  button.primary:hover:not(:disabled){background:var(--hpe-green-dk)}
-  /* toolbar buttons (light bg) */
-  .toolbar button,.pag button,.page-size-wrap button{
-    background:var(--surface);border:1px solid var(--border);color:var(--text);
-    font-size:11px;font-weight:700;letter-spacing:.04em
-  }
-  .toolbar button:hover:not(:disabled),.pag button:hover:not(:disabled),.page-size-wrap button:hover:not(:disabled){
-    background:var(--hpe-green-lt);border-color:var(--hpe-green)
-  }
-  .pag button.primary,.toolbar button.primary{background:var(--hpe-green);border-color:var(--hpe-green-dk);color:#fff}
+  button.primary:hover:not(:disabled){background:var(--hpe-green-dk);color:#fff}
 
   /* ── Stats bar ── */
   .stats-bar{
-    display:flex;gap:0;background:var(--hpe-charcoal);
-    border-bottom:1px solid #3A3A3A
+    display:flex;gap:0;
+    background:var(--stats-bg);
+    border-bottom:2px solid var(--hpe-green-mid);
   }
-  .stat{padding:14px 22px;border-right:1px solid #3A3A3A;min-width:120px;flex:1}
+  .stat{padding:14px 22px;border-right:1px solid var(--hpe-green-mid);min-width:120px;flex:1}
   .stat:last-child{border-right:none}
-  .stat-label{font-size:9px;color:rgba(255,255,255,.5);text-transform:uppercase;font-weight:700;letter-spacing:.1em}
-  .stat-value{font-size:26px;font-weight:700;margin-top:4px;line-height:1;color:#fff}
-  .stat-sub{font-size:10px;color:rgba(255,255,255,.4);margin-top:3px}
+  .stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.1em}
+  .stat-value{font-size:26px;font-weight:700;margin-top:4px;line-height:1;color:var(--text)}
+  .stat-sub{font-size:10px;color:var(--muted);margin-top:3px}
 
   /* ── Filter panel ── */
   .filter-panel{
     background:var(--surface);
-    border-bottom:2px solid var(--border);
+    border-bottom:1px solid var(--border);
     padding:14px 28px;
-    display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end
+    display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;
   }
   .filter-group{display:flex;flex-direction:column;gap:4px}
   .filter-group label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
@@ -98,45 +94,44 @@
     padding:6px 10px;font-size:12px;outline:none;border-radius:2px;height:32px
   }
   input[type=text]:focus,input[type=date]:focus,select:focus{
-    border-color:var(--hpe-green);box-shadow:0 0 0 2px rgba(1,169,130,.15)
+    border-color:var(--hpe-green);box-shadow:0 0 0 2px rgba(1,169,130,.12)
   }
-  #f-search{width:220px}
+  #f-search{width:240px}
   input[type=date]{width:140px}
   select{min-width:130px}
-  .filter-actions{display:flex;gap:8px;align-items:center;margin-left:auto;padding-bottom:0}
+  .filter-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
   .filter-actions button{height:32px;padding:0 14px}
   .filter-count{
-    font-size:11px;font-weight:700;color:var(--hpe-green);
+    font-size:11px;font-weight:700;color:var(--hpe-green-dk);
     background:var(--hpe-green-lt);border:1px solid var(--hpe-green);
     padding:4px 10px;border-radius:2px;white-space:nowrap
   }
 
   /* ── Table wrap ── */
   .table-wrap{padding:20px 28px;overflow-x:auto}
-  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);font-size:12px}
-  thead tr{background:var(--hpe-dark)}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);font-size:12px;border-radius:3px;overflow:hidden}
+  thead tr{background:var(--hpe-green)}
   th{
-    text-align:left;padding:10px 14px;
-    border-bottom:2px solid var(--hpe-green);border-right:1px solid #3A3A3A;
+    text-align:left;padding:11px 14px;
+    border-bottom:none;border-right:1px solid rgba(255,255,255,.2);
     font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
-    white-space:nowrap;cursor:pointer;user-select:none;color:rgba(255,255,255,.85)
+    white-space:nowrap;cursor:pointer;user-select:none;color:#fff
   }
   th:last-child{border-right:none;cursor:default}
-  th:hover:not(.no-sort){background:var(--hpe-charcoal)}
-  th .sa{margin-left:5px;color:rgba(255,255,255,.3);font-size:10px}
-  th.sorted{color:#fff}
-  th.sorted .sa{color:var(--hpe-green)}
-  td{padding:10px 14px;border-bottom:1px solid var(--border);border-right:1px solid #EBEBEB;vertical-align:top}
+  th:hover:not(.no-sort){background:var(--hpe-green-dk)}
+  th .sa{margin-left:5px;color:rgba(255,255,255,.5);font-size:10px}
+  th.sorted .sa{color:#fff}
+  td{padding:10px 14px;border-bottom:1px solid var(--border-lt);border-right:1px solid var(--border-lt);vertical-align:top}
   td:last-child{border-right:none}
   tr.data-row:nth-child(4n+3) td,tr.data-row:nth-child(4n+4) td{background:var(--row-even)}
   tr.data-row:hover td{background:var(--row-hover)!important}
 
   /* ── Badges ── */
   .badge{display:inline-block;padding:3px 8px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap;border-radius:2px;letter-spacing:.04em}
-  .b-drift{background:var(--red);color:#fff;border:1px solid #A03C3A}
-  .b-clean{background:var(--hpe-green);color:#fff;border:1px solid var(--hpe-green-dk)}
-  .b-zone{background:#EFEFEF;color:var(--hpe-charcoal);border:1px solid #CCCCCC;margin:2px 2px 2px 0;font-size:10px}
-  .b-new-zone{background:var(--orange);color:#fff;border:1px solid #A33D00}
+  .b-drift{background:var(--red-lt);color:var(--red);border:1px solid #EDBBBA}
+  .b-clean{background:var(--hpe-green-lt);color:var(--hpe-green-dk);border:1px solid var(--hpe-green-mid)}
+  .b-zone{background:#F0F4F3;color:var(--text-2);border:1px solid var(--border);margin:2px 2px 2px 0;font-size:10px}
+  .b-new-zone{background:#FFF3E6;color:var(--orange);border:1px solid #F5CCB0}
 
   /* ── Delta chips ── */
   .delta-block{margin-bottom:6px}
@@ -144,7 +139,7 @@
   .delta-zname{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
   .chips{display:flex;flex-wrap:wrap;gap:3px}
   .chip{font-size:11px;padding:2px 8px;font-family:"Courier New",Courier,monospace;font-weight:700;border-radius:2px}
-  .chip.add{background:var(--hpe-green-lt);color:var(--hpe-green-dk);border:1px solid #9FDECE}
+  .chip.add{background:var(--hpe-green-lt);color:var(--hpe-green-dk);border:1px solid var(--hpe-green-mid)}
   .chip.rem{background:var(--red-lt);color:#922020;border:1px solid #EDBBBA}
 
   /* ── Detail row ── */
@@ -152,21 +147,21 @@
   tr.detail-row.open{display:table-row}
   .detail-cell{
     padding:20px 28px;
-    background:#F9FFFE!important;
+    background:#F7FDFB!important;
     border-bottom:2px solid var(--border);
-    border-top:1px solid var(--hpe-green-lt)
+    border-top:2px solid var(--hpe-green-lt);
   }
   .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px}
   .di label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
   .di span{
     font-size:12px;font-family:"Courier New",Courier,monospace;
     background:#fff;padding:3px 7px;border:1px solid var(--border);
-    display:inline-block;word-break:break-all;border-radius:2px
+    display:inline-block;word-break:break-all;border-radius:2px;color:var(--text)
   }
   .raw-section{margin-top:12px}
   .raw-toggle{
-    font-size:11px;color:var(--hpe-green);cursor:pointer;border:none;background:none;
-    padding:0;font-weight:700;text-decoration:none;letter-spacing:.03em;text-transform:uppercase
+    font-size:11px;color:var(--hpe-green-dk);cursor:pointer;border:none;background:none;
+    padding:0;font-weight:700;text-transform:uppercase;letter-spacing:.04em
   }
   .raw-toggle:hover{text-decoration:underline}
   .raw-pre{
@@ -179,11 +174,14 @@
 
   /* ── Expand button ── */
   .expand-btn{
-    background:none!important;border:1px solid var(--border)!important;
-    color:var(--hpe-green)!important;font-size:12px!important;padding:4px 8px!important;
-    border-radius:2px!important
+    background:var(--surface)!important;border:1px solid var(--border)!important;
+    color:var(--hpe-green)!important;font-size:12px!important;
+    padding:4px 9px!important;border-radius:2px!important
   }
-  .expand-btn:hover:not(:disabled){background:var(--hpe-green-lt)!important;border-color:var(--hpe-green)!important}
+  .expand-btn:hover:not(:disabled){
+    background:var(--hpe-green-lt)!important;
+    border-color:var(--hpe-green)!important
+  }
 
   /* ── Empty / loading ── */
   .empty{text-align:center;padding:60px 24px;color:var(--muted);background:var(--surface);border:1px solid var(--border)}
@@ -192,14 +190,10 @@
 
   /* ── Pagination ── */
   .pag{display:flex;align-items:center;justify-content:space-between;padding:10px 28px 16px;flex-wrap:wrap;gap:8px}
-  .pag-center{display:flex;align-items:center;gap:6px}
-  .pag-info{
-    font-size:11px;font-weight:700;color:var(--muted);min-width:200px;text-align:center;
-    letter-spacing:.04em;text-transform:uppercase
-  }
+  .pag-info{font-size:11px;font-weight:700;color:var(--muted);min-width:200px;text-align:center;letter-spacing:.04em;text-transform:uppercase}
   .page-size-wrap{font-size:11px;color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.04em}
   .page-size-wrap button{height:28px;padding:0 10px}
-  .page-size-wrap button.active{border-color:var(--hpe-green)!important;color:var(--hpe-green)!important;background:var(--hpe-green-lt)!important}
+  .page-size-wrap button.active{border-color:var(--hpe-green)!important;color:var(--hpe-green-dk)!important;background:var(--hpe-green-lt)!important}
 
   /* ── Connection error banner ── */
   #err-banner{
@@ -210,7 +204,7 @@
   /* ── Toast ── */
   #toast{
     position:fixed;bottom:24px;right:24px;
-    background:var(--hpe-dark);color:#fff;border-left:3px solid var(--hpe-green);
+    background:var(--text);color:#fff;border-left:3px solid var(--hpe-green);
     padding:12px 18px;font-size:12px;font-weight:700;opacity:0;
     transition:opacity .25s;pointer-events:none;z-index:9999;
     border-radius:2px;letter-spacing:.03em
@@ -218,32 +212,33 @@
   #toast.show{opacity:1}
 
   /* ── Hash highlight ── */
-  tr.data-row.hl td{background:#FFF9E6!important;outline:2px solid var(--yellow)}
-
-  /* ── HPE logo SVG inline styling ── */
-  .hpe-logo-img{height:28px;width:auto;filter:brightness(0) invert(1)}
+  tr.data-row.hl td{background:#FFFBE6!important;outline:2px solid var(--yellow)}
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo">
-    <img
-      class="hpe-logo-img"
-      src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Hewlett_Packard_Enterprise_logo_2025_expanded.svg/320px-Hewlett_Packard_Enterprise_logo_2025_expanded.svg.png"
-      alt="Hewlett Packard Enterprise"
-      onerror="this.style.display='none';document.getElementById('hpe-fallback').style.display='flex'"
-    >
-    <!-- Fallback text logo if image fails -->
-    <div id="hpe-fallback" style="display:none;flex-direction:column;gap:1px">
-      <span style="font-size:11px;font-weight:700;color:var(--hpe-green);letter-spacing:.06em;text-transform:uppercase">Hewlett Packard Enterprise</span>
-    </div>
+    <!-- HPE 2025 logo — inlined SVG, no network dependency -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 48" height="36" aria-label="Hewlett Packard Enterprise">
+      <!-- Green square icon -->
+      <rect width="44" height="44" x="0" y="2" rx="2" fill="#01A982"/>
+      <text x="22" y="32" text-anchor="middle" font-family="Arial,Helvetica,sans-serif"
+            font-size="26" font-weight="900" fill="#ffffff" letter-spacing="-1">hpe</text>
+      <!-- Wordmark -->
+      <text x="54" y="21" font-family="Arial,Helvetica,sans-serif"
+            font-size="13" font-weight="700" fill="#1A1A1A" letter-spacing=".3">Hewlett Packard</text>
+      <text x="54" y="37" font-family="Arial,Helvetica,sans-serif"
+            font-size="13" font-weight="700" fill="#01A982" letter-spacing=".3">Enterprise</text>
+    </svg>
+
     <div class="logo-divider"></div>
     <div class="logo-app">
       <span class="logo-app-name">SAIL Drift Audit</span>
       <span class="logo-app-sub">SRX / Morpheus Reconciliation</span>
     </div>
   </div>
+
   <div class="header-right">
     <span id="auto-badge" class="auto-badge" style="display:none">● Auto-Refresh 30s</span>
     <span id="last-refresh"></span>
@@ -263,27 +258,27 @@
   </div>
   <div class="stat">
     <div class="stat-label">Drift Events</div>
-    <div class="stat-value" style="color:#FF6B6B" id="s-drift">—</div>
+    <div class="stat-value" style="color:var(--red)" id="s-drift">—</div>
     <div class="stat-sub" id="s-drift-sub"></div>
   </div>
   <div class="stat">
     <div class="stat-label">IPs Added</div>
-    <div class="stat-value" style="color:var(--hpe-green)" id="s-add">—</div>
+    <div class="stat-value" style="color:var(--hpe-green-dk)" id="s-add">—</div>
     <div class="stat-sub" id="s-add-sub"></div>
   </div>
   <div class="stat">
     <div class="stat-label">IPs Removed</div>
-    <div class="stat-value" style="color:#FF9966" id="s-rem">—</div>
+    <div class="stat-value" style="color:var(--orange)" id="s-rem">—</div>
     <div class="stat-sub" id="s-rem-sub"></div>
   </div>
   <div class="stat">
     <div class="stat-label">New Zones</div>
-    <div class="stat-value" style="color:#A88DDB" id="s-zones">—</div>
+    <div class="stat-value" style="color:var(--purple)" id="s-zones">—</div>
     <div class="stat-sub" id="s-zones-sub"></div>
   </div>
   <div class="stat">
     <div class="stat-label">Retention</div>
-    <div class="stat-value" style="font-size:15px;padding-top:6px;color:rgba(255,255,255,.7)" id="s-ret">—</div>
+    <div class="stat-value" style="font-size:15px;padding-top:6px;color:var(--muted)" id="s-ret">—</div>
     <div class="stat-sub" id="s-ret-sub">records kept</div>
   </div>
 </div>
@@ -292,9 +287,7 @@
 <div class="filter-panel">
   <div class="filter-group">
     <label>Search</label>
-    <div class="filter-row">
-      <input type="text" id="f-search" placeholder="IP address, zone, run ID…" oninput="applyFilters()" style="width:240px">
-    </div>
+    <input type="text" id="f-search" placeholder="IP address, zone, run ID…" oninput="applyFilters()">
   </div>
 
   <div class="filter-group">
@@ -315,7 +308,7 @@
     <label>Date Range</label>
     <div class="filter-row">
       <input type="date" id="f-from" onchange="applyFilters()" title="From date">
-      <span style="color:var(--muted);font-size:11px;font-weight:700;padding:0 2px">→</span>
+      <span style="color:var(--muted);font-size:12px;padding:0 2px">→</span>
       <input type="date" id="f-to" onchange="applyFilters()" title="To date">
     </div>
   </div>
@@ -334,7 +327,7 @@
   <table id="audit-table">
     <thead>
       <tr>
-        <th data-col="ts"      onclick="sortBy('ts')">Timestamp <span class="sa">↕</span></th>
+        <th data-col="ts"      onclick="sortBy('ts')">Timestamp <span class="sa">↓</span></th>
         <th data-col="run_id"  onclick="sortBy('run_id')">Run ID <span class="sa">↕</span></th>
         <th data-col="vsrx_ip" onclick="sortBy('vsrx_ip')">vSRX IP <span class="sa">↕</span></th>
         <th data-col="status"  onclick="sortBy('status')">Status <span class="sa">↕</span></th>
