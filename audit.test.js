@@ -8,7 +8,6 @@ import {
 // ── GLOBAL DOM MOCKING SETUP ──────────────────────────────────────────────────
 // Bun has no browser DOM. We build a minimal mock that covers every element
 // the module touches so no function throws on startup or during tests.
-
 const REQUIRED_IDS = [
   // stats bar
   's-total','s-total-sub','s-drift','s-drift-sub',
