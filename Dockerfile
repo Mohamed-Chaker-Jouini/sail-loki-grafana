@@ -10,6 +10,11 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
+# Route apt through the corporate proxy
+ENV http_proxy=http://10.93.144.53:8080
+ENV https_proxy=http://10.93.144.53:8080
+ENV no_proxy=localhost,127.0.0.1,10.202.52.0/24
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2-dev libxslt-dev gcc \
     && rm -rf /var/lib/apt/lists/*
@@ -18,8 +23,6 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
-
-# copy React build into the place main.py looks for it
 COPY --from=frontend-builder /app/dist ./backend/static
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8880"]
