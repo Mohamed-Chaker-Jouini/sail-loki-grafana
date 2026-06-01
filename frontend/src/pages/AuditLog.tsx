@@ -173,8 +173,8 @@ export default function AuditLog() {
     }
     // sort
     f.sort((a, b) => {
-      let av: any = sortCol === 'status' ? (a.changed?1:0) : a[sortCol] ?? ''
-      let bv: any = sortCol === 'status' ? (b.changed?1:0) : b[sortCol] ?? ''
+      let av: any = sortCol === 'changed' ? (a.changed?1:0) : a[sortCol] ?? ''
+      let bv: any = sortCol === 'changed' ? (b.changed?1:0) : b[sortCol] ?? ''
       if (typeof av === 'string') { av = av.toLowerCase(); bv = String(bv).toLowerCase() }
       return av < bv ? sortDir : av > bv ? -sortDir : 0
     })
