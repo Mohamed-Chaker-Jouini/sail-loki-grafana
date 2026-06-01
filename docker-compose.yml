@@ -1,4 +1,19 @@
 services:
+
+  sail-app:
+    build: .
+    container_name: sail-app
+    ports:
+      - "8880:8880"
+    volumes:
+      - ./topology:/data:rw
+    environment:
+      - DATA_DIR=/data
+      - MAX_HISTORY_ENTRIES=1000
+      - NO_PROXY=localhost,127.0.0.1,10.202.52.0/24
+      - no_proxy=localhost,127.0.0.1,10.202.52.0/24
+    restart: unless-stopped
+
   loki:
     image: grafana/loki:3.7.1
     container_name: sail-loki
@@ -19,24 +34,14 @@ services:
       - ./grafana-data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_INSTALL_PLUGINS=marcusolsson-json-datasource
       - HTTP_PROXY=http://10.93.144.53:8080
       - HTTPS_PROXY=http://10.93.144.53:8080
-      - NO_PROXY=localhost,127.0.0.1,loki,sail-loki,fileserver,sail-fileserver,10.202.52.0/24
+      - NO_PROXY=localhost,127.0.0.1,loki,sail-loki,sail-app,10.202.52.0/24
     restart: unless-stopped
     depends_on:
       - loki
-      - fileserver
-
-  fileserver:
-    image: python:3.12-alpine
-    container_name: sail-fileserver
-    volumes:
-      - ./topology:/data:rw
-      - ./fileserver.py:/app/fileserver.py:ro
-      - ./audit.html:/app/audit.html:ro
-      - ./audit.js:/app/audit.js:ro
-    ports:
-      - "8880:80"
-    restart: unless-stopped
-    entrypoint: ["python3", "/app/fileserver.py"]
+      - sail-app

@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+junos-eznc
+ncclient
+paramiko
+python-multipart
