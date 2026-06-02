@@ -1,12 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { showToast } from '../components/Toast'
 import { loadCredentialsFromCookie } from './Settings'
 
-const [cooldownAB, setCooldownAB] = useState(0)
-const [cooldownPol, setCooldownPol] = useState(0)
-const abTimer = useRef<ReturnType<typeof setInterval>>()
-const polTimer = useRef<ReturnType<typeof setInterval>>()
-
+// Helper cooldown manager function remains cleanly outside the component
 function startCooldown(
   setter: React.Dispatch<React.SetStateAction<number>>,
   timerRef: React.MutableRefObject<ReturnType<typeof setInterval> | undefined>,
@@ -58,6 +54,12 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
 
 // ── main component ─────────────────────────────────────────────────────────────
 export default function Firewall() {
+  // Hooks successfully brought inside the component body where they belong
+  const [cooldownAB, setCooldownAB] = useState(0)
+  const [cooldownPol, setCooldownPol] = useState(0)
+  const abTimer = useRef<ReturnType<typeof setInterval>>()
+  const polTimer = useRef<ReturnType<typeof setInterval>>()
+
   const [book, setBook] = useState<AddressBook | null>(null)
   const [policies, setPolicies] = useState<Policy[]>([])
   const [loadingAB, setLoadingAB] = useState(false)
@@ -75,6 +77,14 @@ export default function Firewall() {
   const [removing, setRemoving] = useState(false)
 
   const configured = !!loadCredentialsFromCookie()
+
+  // Clean up timers dynamically if the page unmounts
+  useEffect(() => {
+    return () => {
+      clearInterval(abTimer.current)
+      clearInterval(polTimer.current)
+    }
+  }, [])
 
   const fetchBook = useCallback(async () => {
     if (cooldownAB > 0) return
@@ -178,7 +188,6 @@ export default function Firewall() {
 
   return (
     <div style={{ padding: 28 }}>
-      {/* error banner */}
       {error && (
         <div style={{
           background: 'var(--red-lt)', border: '1px solid var(--red)',
@@ -192,10 +201,8 @@ export default function Firewall() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
-
         {/* ── left column ── */}
         <div>
-          {/* address book */}
           <SectionHeader
             title={`Address Book${book ? ` — ${book.book_name}` : ''}`}
             action={
@@ -209,7 +216,6 @@ export default function Firewall() {
 
           {book && !loadingAB && (
             <>
-              {/* zone sets */}
               {book.address_sets.map(set => (
                 <div key={set.name} style={{ marginBottom: 16 }}>
                   <div style={{
@@ -267,7 +273,6 @@ export default function Firewall() {
 
         {/* ── right column ── */}
         <div>
-          {/* add IP */}
           <SectionHeader title="Add IP to Zone" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -299,7 +304,6 @@ export default function Firewall() {
             </button>
           </div>
 
-          {/* remove IP */}
           <SectionHeader title="Remove IP from Zone" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -331,7 +335,6 @@ export default function Firewall() {
             </button>
           </div>
 
-          {/* policies */}
           <SectionHeader
             title="Security Policies"
             action={
