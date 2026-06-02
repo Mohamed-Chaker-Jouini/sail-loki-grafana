@@ -42,7 +42,6 @@ interface LayoutNode extends TopoNode {
 
 // ── Horizontal Layered Layout ─────────────────────────────────────────────────
 function buildLayout(topo: TopologyData): LayoutNode[] {
-  // Virtual canvas baseline coordinates
   const layerX = {
     firewall: 200,
     zones: 500,
@@ -56,13 +55,12 @@ function buildLayout(topo: TopologyData): LayoutNode[] {
 
   const result: LayoutNode[] = []
 
-  // 1. Layer 1: Firewall (Left)
+  // 1. Layer 1: Firewall
   if (srx) {
     result.push({ ...srx, x: layerX.firewall, y: centerY, r: 42 })
   }
 
-  // 2. Layer 2: Zones (Middle)
-  // Stack them vertically, centered
+  // 2. Layer 2: Zones
   const zoneSpacing = Math.min(240, 800 / Math.max(1, zones.length))
   const zoneStartY = centerY - ((zones.length - 1) * zoneSpacing) / 2
   const zoneYMap: Record<string, number> = {}
@@ -78,8 +76,7 @@ function buildLayout(topo: TopologyData): LayoutNode[] {
     })
   })
 
-  // 3. Layer 3: VMs (Right)
-  // Map VMs to their parent zones for grouping
+  // 3. Layer 3: VMs
   const zoneVms: Record<string, string[]> = {}
   topo.edges.forEach(e => {
     if (e.source.startsWith('zone_')) {
@@ -90,10 +87,9 @@ function buildLayout(topo: TopologyData): LayoutNode[] {
 
   const placedVms = new Set<string>()
 
-  // Position VMs aligned horizontally with their parent zones
   Object.entries(zoneVms).forEach(([zoneId, vmIds]) => {
     const parentY = zoneYMap[zoneId] ?? centerY
-    const vmSpacing = 75 // Vertical gap between VMs in the same zone
+    const vmSpacing = 75 
     const vmStartY = parentY - ((vmIds.length - 1) * vmSpacing) / 2
 
     vmIds.forEach((vmId, i) => {
@@ -109,7 +105,7 @@ function buildLayout(topo: TopologyData): LayoutNode[] {
     })
   })
 
-  // 4. Fallback for Orphan VMs (Unconnected)
+  // 4. Orphan VMs
   const orphans = vms.filter(v => !placedVms.has(v.id))
   const orphanStartY = centerY - ((orphans.length - 1) * 75) / 2
   orphans.forEach((vm, i) => {
@@ -151,7 +147,6 @@ function Node({ n, selected, onClick }: { n: LayoutNode; selected: boolean; onCl
           userSelect: 'none',
         }}
       >
-        {/* Removed truncation to display full IP */}
         {n.title}
       </text>
       <text
@@ -226,7 +221,6 @@ export default function Topology() {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [lastFetch, setLastFetch] = useState<Date | null>(null)
-  const [cooldown, setCooldown] = useState(0)
   
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(0.85)
@@ -235,7 +229,6 @@ export default function Topology() {
   const containerRef = useRef<HTMLDivElement>(null)
   const dragStart = useRef({ x: 0, y: 0 })
   const clickStartTimestamp = useRef<number>(0)
-  const cooldownTimer = useRef<number | null>(null)
 
   const initializeCenterPosition = useCallback((width: number, height: number) => {
     const virtualCanvasSizeX = 1000
@@ -243,7 +236,6 @@ export default function Topology() {
     const initialScale = Math.min(width / virtualCanvasSizeX, height / virtualCanvasSizeY) * 0.95
     setZoom(initialScale)
     
-    // Offset slightly to center the left-to-right graph
     setPan({
       x: (width - virtualCanvasSizeX * initialScale) / 2 + 50,
       y: (height - virtualCanvasSizeY * initialScale) / 2
@@ -262,31 +254,12 @@ export default function Topology() {
     return () => obs.disconnect()
   }, [topo, initializeCenterPosition, pan.x, pan.y, zoom])
 
-  useEffect(() => {
-    return () => {
-      if (cooldownTimer.current) window.clearInterval(cooldownTimer.current)
-    }
-  }, [])
-
-  const startCooldown = useCallback(() => {
-    setCooldown(30)
-    if (cooldownTimer.current) window.clearInterval(cooldownTimer.current)
-    
-    cooldownTimer.current = window.setInterval(() => {
-      setCooldown(prev => {
-        if (prev <= 1) {
-          if (cooldownTimer.current) window.clearInterval(cooldownTimer.current)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }, [])
-
-  const fetchTopo = useCallback(async () => {
-    setLoading(true)
+  // Fetches data instantly
+  const fetchTopo = useCallback(async (isBackgroundSync = false) => {
+    if (!isBackgroundSync) setLoading(true)
     setError('')
     try {
+      // Force cache bypass
       const r = await fetch('/topology.json?t=' + Date.now())
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
@@ -294,22 +267,27 @@ export default function Topology() {
       
       setTopo(data)
       setLastFetch(new Date())
-      startCooldown()
       
-      if (containerRef.current) {
+      // Only center if it's the very first load
+      if (!isBackgroundSync && containerRef.current && pan.x === 0) {
         const rect = containerRef.current.getBoundingClientRect()
         initializeCenterPosition(rect.width, rect.height)
       }
     } catch (e: any) {
       setError(e.message)
-      showToast('Topology: ' + e.message)
+      if (!isBackgroundSync) showToast('Topology: ' + e.message)
     } finally {
       setLoading(false)
     }
-  }, [startCooldown, initializeCenterPosition])
+  }, [initializeCenterPosition, pan.x])
 
+  // Initial load AND Auto-Polling every 10 seconds
   useEffect(() => {
-    fetchTopo()
+    fetchTopo() // Initial immediate fetch
+    const interval = setInterval(() => {
+      fetchTopo(true) // Silent background fetch
+    }, 10000)
+    return () => clearInterval(interval)
   }, [fetchTopo])
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -354,16 +332,12 @@ export default function Topology() {
   const selectedNode = layout.find(n => n.id === selected) ?? null
   const nodeMap = Object.fromEntries(layout.map(n => [n.id, n]))
 
-  // Bezier curve calculation for smooth left-to-right flow
   function edgePath(src: LayoutNode, tgt: LayoutNode): string {
     const x1 = src.x + src.r
     const y1 = src.y
     const x2 = tgt.x - tgt.r
     const y2 = tgt.y
-    
-    const cpX = (x2 - x1) / 2 // Control point offset
-    
-    // SVG Cubic Bezier Curve (C)
+    const cpX = (x2 - x1) / 2
     return `M${x1},${y1} C${x1 + cpX},${y1} ${x2 - cpX},${y2} ${x2},${y2}`
   }
 
@@ -385,15 +359,16 @@ export default function Topology() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
           {lastFetch && (
             <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
-              Synced: {lastFetch.toLocaleTimeString()}
+              Live Synced: {lastFetch.toLocaleTimeString()}
             </span>
           )}
+          {/* Button is now instant and never goes on cooldown */}
           <button
-            onClick={fetchTopo}
-            disabled={loading || cooldown > 0}
-            className={cooldown === 0 ? "primary" : ""}
+            onClick={() => fetchTopo(false)}
+            disabled={loading}
+            className="primary"
           >
-            {loading ? '...' : cooldown > 0 ? `↻ Sync (${cooldown}s)` : '↻ Sync Canvas'}
+            {loading ? 'Syncing...' : '↻ Sync Canvas'}
           </button>
         </div>
       </div>
