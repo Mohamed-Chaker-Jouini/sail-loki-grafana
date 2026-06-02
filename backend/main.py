@@ -1,10 +1,12 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import topology, history, health, firewall, logs
+from .services.pyez_client import get_topology
+from .routers.firewall import get_current_credentials 
 
 app = FastAPI(title="SAIL", docs_url="/api/docs")
 
@@ -25,9 +27,6 @@ app.include_router(logs.router)
 app.include_router(firewall.router)
 
 # ── OPTIONS passthrough for CORS preflights ────────────────────────────────────
-from fastapi import Request
-from fastapi.responses import Response
-
 @app.options("/{rest:path}")
 async def options_handler(rest: str):
     return Response(status_code=204, headers={
@@ -35,6 +34,15 @@ async def options_handler(rest: str):
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "*",
     })
+
+@app.get("/topology.json")
+def serve_dynamic_topology(creds = Depends(get_current_credentials)):
+    """Intercepts the React app's static file request and serves live vSRX data."""
+    try:
+        topology_data = get_topology(creds)
+        return topology_data
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to query vSRX topology: {str(e)}")
 
 # ── serve React build (must be last) ──────────────────────────────────────────
 STATIC = os.path.join(os.path.dirname(__file__), "static")

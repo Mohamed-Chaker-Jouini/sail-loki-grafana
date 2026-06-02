@@ -7,6 +7,75 @@ from lxml import etree
 from typing import Any
 from .credentials import SRXCredentials
 
+def get_topology(creds: SRXCredentials) -> dict:
+    """Queries the vSRX and builds a real-time React Flow topology map."""
+    book = get_address_book(creds)
+    
+    nodes_map = {}
+    edges = []
+    
+    # 1. The Core Firewall Node
+    nodes_map["srx"] = {
+        "id": "srx",
+        "title": "vSRX",
+        "subTitle": creds.host,
+        "mainStat": "Firewall",
+        "color": "orange"
+    }
+    
+    assigned_ips = set()
+    
+    # 2. Build the Zone Rings
+    for aset in book.get("address_sets", []):
+        set_name = aset["name"]
+        zone_id = f"zone_{set_name.replace('SET_', '').lower()}"
+        
+        # Color coding logic based on your previous Morpheus payload
+        color = "purple" if "WEB" in set_name.upper() else "blue"
+        
+        nodes_map[zone_id] = {
+            "id": zone_id,
+            "title": set_name,
+            "subTitle": f"{set_name.replace('SET_', '')} Tier",
+            "mainStat": f"{len(aset['addresses'])} VMs",
+            "color": color
+        }
+        
+        # Connect SRX to Zone
+        edges.append({"id": f"srx-{zone_id}", "source": "srx", "target": zone_id})
+        
+        # 3. Build the VM Nodes
+        for ip in aset.get("addresses", []):
+            assigned_ips.add(ip)
+            if ip not in nodes_map:
+                nodes_map[ip] = {
+                    "id": ip,
+                    "title": ip,
+                    "subTitle": f"{set_name.replace('SET_', '')} VM",
+                    "mainStat": "LIVE",
+                    "color": "green"
+                }
+            # Connect Zone to VM
+            edges.append({"id": f"{zone_id}-{ip}", "source": zone_id, "target": ip})
+
+    # 4. Handle "Orphaned" IPs (In the address book, but not assigned to a zone)
+    for addr in book.get("addresses", []):
+        ip = addr["name"]
+        if ip not in assigned_ips and ip not in nodes_map:
+            nodes_map[ip] = {
+                "id": ip,
+                "title": ip,
+                "subTitle": "Orphaned",
+                "mainStat": "NO ZONE",
+                "color": "red"
+            }
+            # Orphans have no edges, the React layout will group them automatically
+
+    return {
+        "nodes": list(nodes_map.values()),
+        "edges": edges
+    }
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 @contextmanager
