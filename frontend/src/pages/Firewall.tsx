@@ -2,19 +2,39 @@ import { useState, useEffect, useCallback } from 'react'
 import { showToast } from '../components/Toast'
 import { loadCredentialsFromCookie } from './Settings'
 
+const [cooldownAB, setCooldownAB] = useState(0)
+const [cooldownPol, setCooldownPol] = useState(0)
+const abTimer = useRef<ReturnType<typeof setInterval>>()
+const polTimer = useRef<ReturnType<typeof setInterval>>()
+
+function startCooldown(
+  setter: React.Dispatch<React.SetStateAction<number>>,
+  timerRef: React.MutableRefObject<ReturnType<typeof setInterval> | undefined>,
+  secs = 30
+) {
+  setter(secs)
+  clearInterval(timerRef.current)
+  timerRef.current = setInterval(() => {
+    setter(prev => {
+      if (prev <= 1) { clearInterval(timerRef.current); return 0 }
+      return prev - 1
+    })
+  }, 1000)
+}
+
 // ── types ──────────────────────────────────────────────────────────────────────
-interface AddressEntry  { name: string; prefix: string }
-interface AddressSet    { name: string; addresses: string[] }
-interface AddressBook   {
-  book_name:    string
-  addresses:    AddressEntry[]
+interface AddressEntry { name: string; prefix: string }
+interface AddressSet { name: string; addresses: string[] }
+interface AddressBook {
+  book_name: string
+  addresses: AddressEntry[]
   address_sets: AddressSet[]
 }
 interface Policy {
   from_zone: string
-  to_zone:   string
-  name:      string
-  action:    string
+  to_zone: string
+  name: string
+  action: string
 }
 
 // ── section header ─────────────────────────────────────────────────────────────
@@ -25,8 +45,10 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
       padding: '10px 0', borderBottom: '2px solid var(--hpe-green-mid)',
       marginBottom: 16,
     }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)',
-                    textTransform: 'uppercase', letterSpacing: '.08em' }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: 'var(--muted)',
+        textTransform: 'uppercase', letterSpacing: '.08em'
+      }}>
         {title}
       </div>
       {action}
@@ -36,50 +58,51 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
 
 // ── main component ─────────────────────────────────────────────────────────────
 export default function Firewall() {
-  const [book,      setBook]      = useState<AddressBook | null>(null)
-  const [policies,  setPolicies]  = useState<Policy[]>([])
+  const [book, setBook] = useState<AddressBook | null>(null)
+  const [policies, setPolicies] = useState<Policy[]>([])
   const [loadingAB, setLoadingAB] = useState(false)
-  const [loadingPol,setLoadingPol]= useState(false)
-  const [error,     setError]     = useState('')
+  const [loadingPol, setLoadingPol] = useState(false)
+  const [error, setError] = useState('')
 
   // add-ip form
   const [addZone, setAddZone] = useState('')
-  const [addIp,   setAddIp]   = useState('')
-  const [adding,  setAdding]  = useState(false)
+  const [addIp, setAddIp] = useState('')
+  const [adding, setAdding] = useState(false)
 
   // remove-ip form
   const [remZone, setRemZone] = useState('')
-  const [remIp,   setRemIp]   = useState('')
-  const [removing,setRemoving]= useState(false)
+  const [remIp, setRemIp] = useState('')
+  const [removing, setRemoving] = useState(false)
 
   const configured = !!loadCredentialsFromCookie()
 
   const fetchBook = useCallback(async () => {
+    if (cooldownAB > 0) return
     setLoadingAB(true); setError('')
     try {
       const r = await fetch('/api/firewall/address-book')
-      if (!r.ok) {
-        const d = await r.json()
-        throw new Error(d.detail || r.statusText)
-      }
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || r.statusText) }
       setBook(await r.json())
+      startCooldown(setCooldownAB, abTimer)
     } catch (e: any) {
       setError(e.message)
     } finally {
       setLoadingAB(false)
     }
-  }, [])
+  }, [cooldownAB])
 
   const fetchPolicies = useCallback(async () => {
+    if (cooldownPol > 0) return
     setLoadingPol(true)
     try {
       const r = await fetch('/api/firewall/policies')
       if (!r.ok) return
       const d = await r.json()
       setPolicies(d.policies)
+      startCooldown(setCooldownPol, polTimer)
     } catch { /* silent */ }
     finally { setLoadingPol(false) }
-  }, [])
+  }, [cooldownPol])
 
   useEffect(() => {
     if (configured) { fetchBook(); fetchPolicies() }
@@ -176,8 +199,8 @@ export default function Firewall() {
           <SectionHeader
             title={`Address Book${book ? ` — ${book.book_name}` : ''}`}
             action={
-              <button onClick={fetchBook} disabled={loadingAB}>
-                {loadingAB ? '…' : '↻ Refresh'}
+              <button onClick={fetchBook} disabled={loadingAB || cooldownAB > 0}>
+                {loadingAB ? '…' : cooldownAB > 0 ? `↻ (${cooldownAB}s)` : '↻ Refresh'}
               </button>
             }
           />
@@ -312,8 +335,8 @@ export default function Firewall() {
           <SectionHeader
             title="Security Policies"
             action={
-              <button onClick={fetchPolicies} disabled={loadingPol}>
-                {loadingPol ? '…' : '↻ Refresh'}
+              <button onClick={fetchPolicies} disabled={loadingPol || cooldownPol > 0}>
+                {loadingPol ? '…' : cooldownPol > 0 ? `↻ (${cooldownPol}s)` : '↻ Refresh'}
               </button>
             }
           />
@@ -326,7 +349,7 @@ export default function Firewall() {
             }}>
               <thead>
                 <tr style={{ background: 'var(--hpe-green)' }}>
-                  {['From Zone','To Zone','Policy Name','Action'].map(h => (
+                  {['From Zone', 'To Zone', 'Policy Name', 'Action'].map(h => (
                     <th key={h} style={{
                       textAlign: 'left', padding: '8px 10px',
                       fontSize: 10, fontWeight: 700,

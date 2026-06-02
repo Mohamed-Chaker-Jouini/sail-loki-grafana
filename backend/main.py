@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import topology, history, health, firewall
+from .routers import topology, history, health, firewall, logs
 
 app = FastAPI(title="SAIL", docs_url="/api/docs")
 
@@ -19,6 +19,7 @@ app.add_middleware(
 app.include_router(topology.router)
 app.include_router(history.router)
 app.include_router(health.router)
+app.include_router(logs.router)
 
 # ── new firewall control API ───────────────────────────────────────────────────
 app.include_router(firewall.router)
