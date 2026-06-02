@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import topology, history, health, firewall, logs
 from .services.pyez_client import get_topology
-from .routers.firewall import get_current_credentials 
+from .routers.firewall import _creds
 
 app = FastAPI(title="SAIL", docs_url="/api/docs")
 
@@ -36,7 +36,7 @@ async def options_handler(rest: str):
     })
 
 @app.get("/topology.json")
-def serve_dynamic_topology(creds = Depends(get_current_credentials)):
+def serve_dynamic_topology(creds = Depends(_creds)):
     """Intercepts the React app's static file request and serves live vSRX data."""
     try:
         topology_data = get_topology(creds)
