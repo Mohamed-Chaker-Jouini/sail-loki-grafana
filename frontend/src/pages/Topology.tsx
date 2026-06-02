@@ -8,40 +8,43 @@ interface TopoNode {
   mainStat: string
   color:    string
 }
+
 interface TopoEdge {
-  id:     string
-  source: string
-  target: string
+  id:      string
+  source:  string
+  target:  string
 }
-interface Topology {
+
+interface TopologyData {
   nodes: TopoNode[]
   edges: TopoEdge[]
 }
 
-// ── colour map matching Grafana node graph exactly ────────────────────────────
+// Map color tokens to match your corporate system palette or fall back safely
 const NODE_COLORS: Record<string, string> = {
-  orange:        '#E8853D',
-  blue:          '#4C78A8',
-  purple:        '#7B61C4',
-  green:         '#3AA655',
-  yellow:        '#C4A229',
-  'semi-dark-red':'#B03A2E',
-  red:           '#C54E4B',
-}
-function resolveColor(c: string): string {
-  return NODE_COLORS[c] ?? c ?? '#4C78A8'
+  orange:          'var(--orange, #CC4E00)',
+  blue:            'var(--hpe-green-dk, #007B5E)', // mapping fallback blue cleanly
+  purple:          'var(--purple, #6B40A8)',
+  green:           'var(--hpe-green, #01A982)',
+  yellow:          'var(--yellow, #A8750A)',
+  'semi-dark-red': 'var(--red, #C54E4B)',
+  red:             'var(--red, #C54E4B)',
 }
 
-// ── layout: radial from centre ────────────────────────────────────────────────
+function resolveColor(c: string): string {
+  return NODE_COLORS[c] ?? c ?? 'var(--hpe-green, #01A982)'
+}
+
 interface LayoutNode extends TopoNode {
   x: number
   y: number
   r: number
 }
 
-function buildLayout(topo: Topology, w: number, h: number): LayoutNode[] {
-  const cx = w / 2
-  const cy = h / 2
+// Computes structural coordinates inside an isolated 1000x1000 virtual matrix
+function buildLayout(topo: TopologyData): LayoutNode[] {
+  const cx = 500
+  const cy = 500
 
   const srx   = topo.nodes.find(n => n.id === 'srx')
   const zones  = topo.nodes.filter(n => n.id.startsWith('zone_'))
@@ -49,51 +52,40 @@ function buildLayout(topo: Topology, w: number, h: number): LayoutNode[] {
 
   const result: LayoutNode[] = []
 
-  // SRX in centre
-  if (srx) result.push({ ...srx, x: cx, y: cy, r: 38 })
+  // Centerpiece gateway
+  if (srx) result.push({ ...srx, x: cx, y: cy, r: 42 })
 
-  // zones on inner ring
-  const zoneR = Math.min(w, h) * 0.28
+  // Structural rings scaled perfectly for smaller node environments
+  const zoneR = 180
   zones.forEach((z, i) => {
     const angle = (2 * Math.PI * i) / zones.length - Math.PI / 2
     result.push({
       ...z,
       x: cx + zoneR * Math.cos(angle),
       y: cy + zoneR * Math.sin(angle),
-      r: 30,
+      r: 32,
     })
   })
 
-  // VMs on outer ring, grouped by zone
-  const vmR = Math.min(w, h) * 0.46
+  const vmR = 320
   const zoneAngles: Record<string, number> = {}
   zones.forEach((z, i) => {
     zoneAngles[z.id] = (2 * Math.PI * i) / zones.length - Math.PI / 2
   })
 
-  // group VMs by their zone edge
   const zoneVms: Record<string, string[]> = {}
   topo.edges.forEach(e => {
+    const src = e.source
     const target = e.target
-    const src    = e.source
     if (src.startsWith('zone_')) {
       if (!zoneVms[src]) zoneVms[src] = []
-      zoneVms[src].push(target)
-    }
-  })
-
-  // also handle removed- nodes (source is zone_*)
-  topo.edges.forEach(e => {
-    if (e.source.startsWith('zone_') && e.target.startsWith('removed-')) {
-      if (!zoneVms[e.source]) zoneVms[e.source] = []
-      if (!zoneVms[e.source].includes(e.target))
-        zoneVms[e.source].push(e.target)
+      if (!zoneVms[src].includes(target)) zoneVms[src].push(target)
     }
   })
 
   Object.entries(zoneVms).forEach(([zoneId, vmIds]) => {
     const baseAngle = zoneAngles[zoneId] ?? 0
-    const spread    = Math.min(0.6, vmIds.length * 0.15)
+    const spread    = Math.min(0.8, vmIds.length * 0.22)
     vmIds.forEach((vmId, i) => {
       const vm = vms.find(v => v.id === vmId)
       if (!vm) return
@@ -105,12 +97,11 @@ function buildLayout(topo: Topology, w: number, h: number): LayoutNode[] {
         ...vm,
         x: cx + vmR * Math.cos(angle),
         y: cy + vmR * Math.sin(angle),
-        r: 22,
+        r: 24,
       })
     })
   })
 
-  // any VMs not connected to a zone — spread around outer ring
   const placed = new Set(result.map(n => n.id))
   const orphans = vms.filter(v => !placed.has(v.id))
   orphans.forEach((vm, i) => {
@@ -119,33 +110,24 @@ function buildLayout(topo: Topology, w: number, h: number): LayoutNode[] {
       ...vm,
       x: cx + vmR * Math.cos(angle),
       y: cy + vmR * Math.sin(angle),
-      r: 22,
+      r: 24,
     })
   })
 
   return result
 }
 
-// ── node component ────────────────────────────────────────────────────────────
-function Node({ n, selected, onClick }: {
-  n: LayoutNode
-  selected: boolean
-  onClick: () => void
-}) {
-  const fill   = resolveColor(n.color)
-  const stroke = selected ? '#fff' : 'rgba(0,0,0,.18)'
-  const sw     = selected ? 3 : 1.5
+function Node({ n, selected, onClick }: { n: LayoutNode; selected: boolean; onClick: () => void }) {
+  const fill = resolveColor(n.color)
+  const stroke = selected ? 'var(--text, #1A1A1A)' : 'rgba(0,0,0,0.12)'
+  const sw = selected ? 3 : 1.5
 
   return (
-    <g
-      onClick={onClick}
-      style={{ cursor: 'pointer' }}
-      transform={`translate(${n.x},${n.y})`}
-    >
+    <g onClick={onClick} style={{ cursor: 'pointer' }} transform={`translate(${n.x},${n.y})`}>
       <circle
-        r={n.r + (selected ? 5 : 0)}
+        r={n.r + (selected ? 6 : 0)}
         fill={fill}
-        fillOpacity={0.15}
+        fillOpacity={0.10}
         stroke={selected ? fill : 'transparent'}
         strokeWidth={selected ? 2 : 0}
       />
@@ -156,21 +138,24 @@ function Node({ n, selected, onClick }: {
         style={{
           fontSize: n.r > 30 ? 11 : 9,
           fontWeight: 700,
-          fill: '#fff',
+          fill: '#FFFFFF',
           fontFamily: 'inherit',
           pointerEvents: 'none',
+          userSelect: 'none',
         }}
       >
-        {n.title.length > 8 ? n.title.slice(0, 7) + '…' : n.title}
+        {n.title.length > 10 ? n.title.slice(0, 9) + '…' : n.title}
       </text>
       <text
-        y={n.r + 14}
+        y={n.r + 15}
         textAnchor="middle"
         style={{
           fontSize: 10,
+          fontWeight: 600,
           fill: 'var(--text-2)',
           fontFamily: 'inherit',
           pointerEvents: 'none',
+          userSelect: 'none',
         }}
       >
         {n.mainStat}
@@ -179,113 +164,193 @@ function Node({ n, selected, onClick }: {
   )
 }
 
-// ── detail panel ──────────────────────────────────────────────────────────────
 function DetailPanel({ node, onClose }: { node: LayoutNode; onClose: () => void }) {
   const fill = resolveColor(node.color)
   return (
-    <div style={{
-      position: 'absolute', top: 16, right: 16,
+    <div className="no-pan" style={{
+      position: 'absolute', top: 20, right: 20,
       background: 'var(--surface)',
-      border: `2px solid ${fill}`,
-      borderRadius: 4, padding: '16px 18px', minWidth: 200,
-      boxShadow: '0 4px 16px rgba(0,0,0,.10)',
-      zIndex: 10,
+      border: `1px solid var(--border)`,
+      borderTop: `4px solid ${fill}`,
+      borderRadius: 2, padding: '16px 18px', minWidth: 240,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
+      zIndex: 100,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{
-            width: 14, height: 14, borderRadius: '50%',
-            background: fill, flexShrink: 0,
-          }} />
-          <div style={{ fontWeight: 700, fontSize: 13 }}>{node.title}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: fill }} />
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{node.title}</div>
         </div>
         <button
           onClick={onClose}
           style={{
             border: 'none', background: 'none', cursor: 'pointer',
-            color: 'var(--muted)', fontSize: 16, padding: '0 0 0 8px',
+            color: 'var(--muted)', fontSize: 16, padding: '0 4px',
             fontWeight: 700, lineHeight: 1,
           }}
         >×</button>
       </div>
       {[
-        ['ID',       node.id],
-        ['Subtitle', node.subTitle],
-        ['Stat',     node.mainStat],
-      ].map(([l, v]) => v ? (
-        <div key={l} style={{ marginBottom: 8 }}>
+        ['Node ID', node.id],
+        ['Address/Sub', node.subTitle],
+        ['Status Scope', node.mainStat],
+      ].map(([label, value]) => value ? (
+        <div key={label} style={{ marginBottom: 10 }}>
           <div style={{
             fontSize: 9, fontWeight: 700, color: 'var(--muted)',
-            textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2,
-          }}>{l}</div>
+            textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3,
+          }}>{label}</div>
           <div style={{
             fontSize: 11, fontFamily: 'monospace',
-            background: 'var(--bg)', padding: '3px 7px',
-            border: '1px solid var(--border)', borderRadius: 2,
-          }}>{v}</div>
+            background: 'var(--bg)', padding: '4px 8px',
+            border: '1px solid var(--border-lt)', borderRadius: 2,
+            color: 'var(--text-2)', overflowX: 'auto'
+          }}>{value}</div>
         </div>
       ) : null)}
     </div>
   )
 }
 
-// ── main component ────────────────────────────────────────────────────────────
 export default function Topology() {
-  const [topo,     setTopo]     = useState<Topology | null>(null)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [topo, setTopo] = useState<TopologyData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
-  const [lastFetch,setLastFetch]= useState<Date | null>(null)
+  const [lastFetch, setLastFetch] = useState<Date | null>(null)
   const [cooldown, setCooldown] = useState(0)
+  
+  // Transform State Systems for Mapping/Panning/Zooming Engine
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(0.85) // Start tracking outward slightly to center coordinate frame cleanly
+  const [isDragging, setIsDragging] = useState(false)
+  
   const containerRef = useRef<HTMLDivElement>(null)
-  const [dims, setDims] = useState({ w: 800, h: 560 })
-  const cooldownTimer = useRef<ReturnType<typeof setInterval>>()
+  const dragStart = useRef({ x: 0, y: 0 })
+  const clickStartTimestamp = useRef<number>(0)
+  const cooldownTimer = useRef<number | null>(null)
+
+  // Automatic Viewport Centering Logic based on element scale
+  const initializeCenterPosition = useCallback((width: number, height: number) => {
+    const virtualCanvasSize = 1000
+    const initialScale = Math.min(width, height) / virtualCanvasSize * 0.85
+    setZoom(initialScale)
+    setPan({
+      x: (width - virtualCanvasSize * initialScale) / 2,
+      y: (height - virtualCanvasSize * initialScale) / 2
+    })
+  }, [])
 
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect
-      setDims({ w: Math.max(width, 400), h: Math.max(height, 400) })
+      if (!entries || entries.length === 0 || topo === null) return
+      // Only execute centering structural logic on initialization parameters
+      if (pan.x === 0 && pan.y === 0 && zoom === 0.85) {
+        const { width, height } = entries[0].contentRect
+        initializeCenterPosition(width, height)
+      }
     })
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
+  }, [topo, initializeCenterPosition, pan.x, pan.y, zoom])
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimer.current) window.clearInterval(cooldownTimer.current)
+    }
   }, [])
 
   const startCooldown = useCallback(() => {
     setCooldown(30)
-    clearInterval(cooldownTimer.current)
-    cooldownTimer.current = setInterval(() => {
+    if (cooldownTimer.current) window.clearInterval(cooldownTimer.current)
+    
+    cooldownTimer.current = window.setInterval(() => {
       setCooldown(prev => {
-        if (prev <= 1) { clearInterval(cooldownTimer.current); return 0 }
+        if (prev <= 1) {
+          if (cooldownTimer.current) window.clearInterval(cooldownTimer.current)
+          return 0
+        }
         return prev - 1
       })
     }, 1000)
   }, [])
 
   const fetchTopo = useCallback(async () => {
-    if (cooldown > 0) return
-    setLoading(true); setError('')
+    setLoading(true)
+    setError('')
     try {
       const r = await fetch('/topology.json?t=' + Date.now())
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
-      if (!data.nodes) throw new Error('No topology data yet')
+      if (!data || !data.nodes) throw new Error('Data structure parsing error.')
+      
       setTopo(data)
       setLastFetch(new Date())
       startCooldown()
+      
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        initializeCenterPosition(rect.width, rect.height)
+      }
     } catch (e: any) {
       setError(e.message)
       showToast('Topology: ' + e.message)
     } finally {
       setLoading(false)
     }
-  }, [cooldown, startCooldown])
+  }, [startCooldown, initializeCenterPosition])
 
-  useEffect(() => { fetchTopo() }, [])
+  useEffect(() => {
+    fetchTopo()
+  }, [fetchTopo])
 
-  const layout = topo ? buildLayout(topo, dims.w, dims.h) : []
+  // Mouse Input/Pointer Events Interceptors for spatial canvas movement
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.no-pan')) return
+    setIsDragging(true)
+    clickStartTimestamp.current = Date.now()
+    dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return
+    setPan({
+      x: e.clientX - dragStart.current.x,
+      y: e.clientY - dragStart.current.y
+    })
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+  }
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    if (!containerRef.current) return
+
+    const rect = containerRef.current.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+
+    // Configure zoom scale coefficient factors
+    const zoomFactor = 1.12
+    let nextZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor
+    
+    // Hard ceiling constraints for map scaling stability
+    nextZoom = Math.max(0.2, Math.min(nextZoom, 4.0))
+
+    // Mathematical adjustments to scale viewport directly into mouse pointer focal vector
+    setPan(prevPan => ({
+      x: mouseX - (mouseX - prevPan.x) * (nextZoom / zoom),
+      y: mouseY - (mouseY - prevPan.y) * (nextZoom / zoom)
+    }))
+    setZoom(nextZoom)
+  }
+
+  const layout = topo ? buildLayout(topo) : []
   const selectedNode = layout.find(n => n.id === selected) ?? null
+  const nodeMap = Object.fromEntries(layout.map(n => [n.id, n]))
 
-  // build edge path between two layout nodes
   function edgePath(src: LayoutNode, tgt: LayoutNode): string {
     const dx = tgt.x - src.x
     const dy = tgt.y - src.y
@@ -300,128 +365,121 @@ export default function Topology() {
     return `M${x1},${y1} L${x2},${y2}`
   }
 
-  const nodeMap = Object.fromEntries(layout.map(n => [n.id, n]))
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)' }}>
-      {/* toolbar */}
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)', width: '100%', userSelect: 'none' }}>
+      {/* Control Bar Actions */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 20px',
-        background: 'var(--stats-bg)',
-        borderBottom: '1px solid var(--hpe-green-mid)',
-        flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
+        background: 'var(--stats-bg)', borderBottom: '1px solid var(--border)', flexShrink: 0,
       }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)',
-                      textTransform: 'uppercase', letterSpacing: '.08em' }}>
-          Live Network Topology
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          Live Network Topology Map
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+        
+        {/* Navigation Help Indicator */}
+        <div style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 16, display: 'inline-flex', gap: 10 }}>
+          <span>🖱️ Drag to Move</span>
+          <span>📜 Scroll to Zoom</span>
+        </div>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
           {lastFetch && (
-            <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700 }}>
-              Last fetched: {lastFetch.toLocaleTimeString()}
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
+              Synced: {lastFetch.toLocaleTimeString()}
             </span>
           )}
           <button
             onClick={fetchTopo}
             disabled={loading || cooldown > 0}
+            className={cooldown === 0 ? "primary" : ""}
           >
-            {loading ? '…' : cooldown > 0 ? `↻ Refresh (${cooldown}s)` : '↻ Refresh'}
+            {loading ? '...' : cooldown > 0 ? `↻ Sync (${cooldown}s)` : '↻ Sync Canvas'}
           </button>
         </div>
       </div>
 
-      {/* legend */}
-      <div style={{
-        display: 'flex', gap: 16, padding: '8px 20px',
-        background: 'var(--surface)', borderBottom: '1px solid var(--border-lt)',
-        flexShrink: 0, flexWrap: 'wrap',
-      }}>
-        {[
-          { color: '#E8853D', label: 'vSRX Firewall' },
-          { color: '#4C78A8', label: 'Zone' },
-          { color: '#3AA655', label: 'In Sync' },
-          { color: '#C54E4B', label: 'Drift Fixed / Removed' },
-        ].map(({ color, label }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div style={{
-              width: 10, height: 10, borderRadius: '50%',
-              background: color, flexShrink: 0,
-            }} />
-            <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 700,
-                           textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              {label}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* graph area */}
+      {/* Dynamic Graphing Canvas Grid */}
       <div
         ref={containerRef}
-        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        style={{
+          flex: 1, position: 'relative', overflow: 'hidden',
+          background: 'var(--bg)', cursor: isDragging ? 'grabbing' : 'grab'
+        }}
       >
         {error && (
-          <div style={{
-            position: 'absolute', top: '50%', left: '50%',
-            transform: 'translate(-50%,-50%)',
-            textAlign: 'center', color: 'var(--muted)',
-          }}>
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📡</div>
-            <div style={{ fontWeight: 700 }}>{error}</div>
-            <div style={{ fontSize: 11, marginTop: 4 }}>
-              Waiting for the first Ansible run to publish topology data.
+            <div style={{ fontWeight: 700, color: 'var(--text)' }}>{error}</div>
+            <div style={{ fontSize: 11, marginTop: 4, color: 'var(--muted)' }}>
+              Verify network path connectivity configurations on endpoint target 8880.
             </div>
           </div>
         )}
 
         {!error && topo && (
           <svg
-            width={dims.w}
-            height={dims.h}
-            style={{ display: 'block' }}
+            width="100%"
+            height="100%"
+            style={{ display: 'block', pointerEvents: 'auto' }}
             onClick={e => {
-              if ((e.target as SVGElement).tagName === 'svg') setSelected(null)
+              // Ensure that shifting canvas around does not drop selection properties or trigger accidental closures
+              const interactionDuration = Date.now() - clickStartTimestamp.current
+              if (interactionDuration > 200) return 
+
+              if ((e.target as SVGElement).tagName === 'svg') {
+                setSelected(null)
+              }
             }}
           >
-            {/* edges */}
-            <g>
-              {topo.edges.map(edge => {
-                const src = nodeMap[edge.source]
-                const tgt = nodeMap[edge.target]
-                if (!src || !tgt) return null
-                const d = edgePath(src, tgt)
-                return (
-                  <path
-                    key={edge.id}
-                    d={d}
-                    stroke="var(--border)"
-                    strokeWidth={1.5}
-                    fill="none"
-                    strokeOpacity={0.7}
+            {/* Global Matrix Transform Node Wrappers */}
+            <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+              {/* Layout Vector Connectors */}
+              <g>
+                {topo.edges.map(edge => {
+                  const src = nodeMap[edge.source]
+                  const tgt = nodeMap[edge.target]
+                  if (!src || !tgt) return null
+                  const d = edgePath(src, tgt)
+                  return (
+                    <path
+                      key={edge.id}
+                      d={d}
+                      stroke="var(--border)"
+                      strokeWidth={1.75}
+                      fill="none"
+                      strokeOpacity={0.8}
+                    />
+                  )
+                })}
+              </g>
+
+              {/* Layout Node Systems */}
+              <g>
+                {layout.map(n => (
+                  <Node
+                    key={n.id}
+                    n={n}
+                    selected={selected === n.id}
+                    onClick={() => {
+                      const dragDuration = Date.now() - clickStartTimestamp.current
+                      if (dragDuration > 200) return // Drag event isolated successfully
+                      setSelected(selected === n.id ? null : n.id)
+                    }}
                   />
-                )
-              })}
-            </g>
-            {/* nodes */}
-            <g>
-              {layout.map(n => (
-                <Node
-                  key={n.id}
-                  n={n}
-                  selected={selected === n.id}
-                  onClick={() => setSelected(selected === n.id ? null : n.id)}
-                />
-              ))}
+                ))}
+              </g>
             </g>
           </svg>
         )}
 
+        {/* Floating Detail Overlay */}
         {selectedNode && (
-          <DetailPanel
-            node={selectedNode}
-            onClose={() => setSelected(null)}
-          />
+          <DetailPanel node={selectedNode} onClose={() => setSelected(null)} />
         )}
       </div>
     </div>
