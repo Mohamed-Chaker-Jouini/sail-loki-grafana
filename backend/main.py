@@ -18,7 +18,6 @@ app.add_middleware(
 )
 
 # ── existing endpoints (Ansible playbook calls these — do not change URLs) ─────
-app.include_router(topology.router)
 app.include_router(history.router)
 app.include_router(health.router)
 app.include_router(logs.router)
