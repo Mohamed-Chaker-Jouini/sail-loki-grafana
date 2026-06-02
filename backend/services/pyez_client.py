@@ -1,3 +1,5 @@
+import time
+from contextlib import contextmanager
 from jnpr.junos import Device
 from jnpr.junos.utils.config import Config
 from jnpr.junos.exception import ConnectError, RpcError
@@ -7,14 +9,34 @@ from .credentials import SRXCredentials
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-def _dev(creds: SRXCredentials):
-    return Device(
-        host     = creds.host,
-        user     = creds.username,
-        password = creds.password,
-        port     = creds.port,
-        gather_facts = False,
+@contextmanager
+def _connected_dev(creds: SRXCredentials, max_retries: int = 3, delay: int = 2):
+    """Context manager that yields a connected Device with retry logic."""
+    dev = Device(
+        host=creds.host,
+        user=creds.username,
+        password=creds.password,
+        port=creds.port,
+        gather_facts=False,
     )
+    
+    connected = False
+    for attempt in range(max_retries):
+        try:
+            dev.open()
+            connected = True
+            break
+        except ConnectError as e:
+            if attempt == max_retries - 1:
+                raise RuntimeError(f"Failed to connect to vSRX at {creds.host} after {max_retries} attempts: {e}")
+            time.sleep(delay)
+
+    try:
+        yield dev
+    finally:
+        if connected:
+            dev.close()
+
 
 def _xml_text(element, path: str) -> str:
     el = element.find(path)
@@ -40,11 +62,15 @@ def get_address_book(creds: SRXCredentials, book_name: str = "MORPHEUS_MANAGED")
       </security>
     </configuration>
     """
-    with _dev(creds) as dev:
+    with _connected_dev(creds) as dev:
         config = dev.rpc.get_config(filter_xml=etree.fromstring(filter_xml))
 
-    ns   = {"j": "http://xml.juniper.net/xnm/1.1/xnm"}
-    book = config.find(".//address-book", ns) or config.find(".//address-book")
+    ns = {"j": "http://xml.juniper.net/xnm/1.1/xnm"}
+    
+    # Fix for lxml FutureWarning: Avoid truth-testing elements directly
+    book = config.find(".//address-book", ns)
+    if book is None:
+        book = config.find(".//address-book")
 
     addresses = []
     address_sets = []
@@ -57,8 +83,8 @@ def get_address_book(creds: SRXCredentials, book_name: str = "MORPHEUS_MANAGED")
                 addresses.append({"name": name, "prefix": prefix})
 
         for aset in book.findall("address-set"):
-            set_name   = _xml_text(aset, "name")
-            set_addrs  = [_xml_text(a, "name") for a in aset.findall("address") if _xml_text(a, "name")]
+            set_name  = _xml_text(aset, "name")
+            set_addrs = [_xml_text(a, "name") for a in aset.findall("address") if _xml_text(a, "name")]
             if set_name:
                 address_sets.append({"name": set_name, "addresses": set_addrs})
 
@@ -113,13 +139,14 @@ def get_policies(creds: SRXCredentials) -> list[dict]:
       </security>
     </configuration>
     """
-    with _dev(creds) as dev:
+    with _connected_dev(creds) as dev:
         config = dev.rpc.get_config(filter_xml=etree.fromstring(filter_xml))
 
     policies = []
     for ctx in config.iter("policy"):
         from_zone = ""
         to_zone   = ""
+        
         # context block has from-zone-name / to-zone-name siblings
         parent = ctx.getparent()
         if parent is not None:
@@ -153,7 +180,7 @@ def get_policies(creds: SRXCredentials) -> list[dict]:
 # ── internal ───────────────────────────────────────────────────────────────────
 
 def _apply_commands(creds: SRXCredentials, commands: list[str]) -> None:
-    with _dev(creds) as dev:
+    with _connected_dev(creds) as dev:
         with Config(dev, mode="exclusive") as cu:
             for cmd in commands:
                 cu.load(cmd, format="set")
