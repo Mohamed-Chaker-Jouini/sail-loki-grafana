@@ -20,10 +20,9 @@ interface TopologyData {
   edges: TopoEdge[]
 }
 
-// Map color tokens to match your corporate system palette or fall back safely
 const NODE_COLORS: Record<string, string> = {
   orange:          'var(--orange, #CC4E00)',
-  blue:            'var(--hpe-green-dk, #007B5E)', // mapping fallback blue cleanly
+  blue:            'var(--hpe-green-dk, #007B5E)',
   purple:          'var(--purple, #6B40A8)',
   green:           'var(--hpe-green, #01A982)',
   yellow:          'var(--yellow, #A8750A)',
@@ -41,76 +40,84 @@ interface LayoutNode extends TopoNode {
   r: number
 }
 
-// Computes structural coordinates inside an isolated 1000x1000 virtual matrix
+// ── Horizontal Layered Layout ─────────────────────────────────────────────────
 function buildLayout(topo: TopologyData): LayoutNode[] {
-  const cx = 500
-  const cy = 500
+  // Virtual canvas baseline coordinates
+  const layerX = {
+    firewall: 200,
+    zones: 500,
+    vms: 850
+  }
+  const centerY = 500
 
-  const srx   = topo.nodes.find(n => n.id === 'srx')
-  const zones  = topo.nodes.filter(n => n.id.startsWith('zone_'))
-  const vms    = topo.nodes.filter(n => !n.id.startsWith('zone_') && n.id !== 'srx')
+  const srx = topo.nodes.find(n => n.id === 'srx')
+  const zones = topo.nodes.filter(n => n.id.startsWith('zone_'))
+  const vms = topo.nodes.filter(n => !n.id.startsWith('zone_') && n.id !== 'srx')
 
   const result: LayoutNode[] = []
 
-  // Centerpiece gateway
-  if (srx) result.push({ ...srx, x: cx, y: cy, r: 42 })
+  // 1. Layer 1: Firewall (Left)
+  if (srx) {
+    result.push({ ...srx, x: layerX.firewall, y: centerY, r: 42 })
+  }
 
-  // Structural rings scaled perfectly for smaller node environments
-  const zoneR = 180
+  // 2. Layer 2: Zones (Middle)
+  // Stack them vertically, centered
+  const zoneSpacing = Math.min(240, 800 / Math.max(1, zones.length))
+  const zoneStartY = centerY - ((zones.length - 1) * zoneSpacing) / 2
+  const zoneYMap: Record<string, number> = {}
+
   zones.forEach((z, i) => {
-    const angle = (2 * Math.PI * i) / zones.length - Math.PI / 2
+    const y = zoneStartY + i * zoneSpacing
+    zoneYMap[z.id] = y
     result.push({
       ...z,
-      x: cx + zoneR * Math.cos(angle),
-      y: cy + zoneR * Math.sin(angle),
-      r: 32,
+      x: layerX.zones,
+      y: y,
+      r: 34,
     })
   })
 
-  const vmR = 320
-  const zoneAngles: Record<string, number> = {}
-  zones.forEach((z, i) => {
-    zoneAngles[z.id] = (2 * Math.PI * i) / zones.length - Math.PI / 2
-  })
-
+  // 3. Layer 3: VMs (Right)
+  // Map VMs to their parent zones for grouping
   const zoneVms: Record<string, string[]> = {}
   topo.edges.forEach(e => {
-    const src = e.source
-    const target = e.target
-    if (src.startsWith('zone_')) {
-      if (!zoneVms[src]) zoneVms[src] = []
-      if (!zoneVms[src].includes(target)) zoneVms[src].push(target)
+    if (e.source.startsWith('zone_')) {
+      if (!zoneVms[e.source]) zoneVms[e.source] = []
+      if (!zoneVms[e.source].includes(e.target)) zoneVms[e.source].push(e.target)
     }
   })
 
+  const placedVms = new Set<string>()
+
+  // Position VMs aligned horizontally with their parent zones
   Object.entries(zoneVms).forEach(([zoneId, vmIds]) => {
-    const baseAngle = zoneAngles[zoneId] ?? 0
-    const spread    = Math.min(0.8, vmIds.length * 0.22)
+    const parentY = zoneYMap[zoneId] ?? centerY
+    const vmSpacing = 75 // Vertical gap between VMs in the same zone
+    const vmStartY = parentY - ((vmIds.length - 1) * vmSpacing) / 2
+
     vmIds.forEach((vmId, i) => {
       const vm = vms.find(v => v.id === vmId)
       if (!vm) return
-      const offset = vmIds.length === 1
-        ? 0
-        : -spread / 2 + (spread / (vmIds.length - 1)) * i
-      const angle = baseAngle + offset
+      placedVms.add(vmId)
       result.push({
         ...vm,
-        x: cx + vmR * Math.cos(angle),
-        y: cy + vmR * Math.sin(angle),
-        r: 24,
+        x: layerX.vms,
+        y: vmStartY + i * vmSpacing,
+        r: 28,
       })
     })
   })
 
-  const placed = new Set(result.map(n => n.id))
-  const orphans = vms.filter(v => !placed.has(v.id))
+  // 4. Fallback for Orphan VMs (Unconnected)
+  const orphans = vms.filter(v => !placedVms.has(v.id))
+  const orphanStartY = centerY - ((orphans.length - 1) * 75) / 2
   orphans.forEach((vm, i) => {
-    const angle = (2 * Math.PI * i) / orphans.length
     result.push({
       ...vm,
-      x: cx + vmR * Math.cos(angle),
-      y: cy + vmR * Math.sin(angle),
-      r: 24,
+      x: layerX.vms,
+      y: orphanStartY + i * 75,
+      r: 28,
     })
   })
 
@@ -144,7 +151,8 @@ function Node({ n, selected, onClick }: { n: LayoutNode; selected: boolean; onCl
           userSelect: 'none',
         }}
       >
-        {n.title.length > 10 ? n.title.slice(0, 9) + '…' : n.title}
+        {/* Removed truncation to display full IP */}
+        {n.title}
       </text>
       <text
         y={n.r + 15}
@@ -220,9 +228,8 @@ export default function Topology() {
   const [lastFetch, setLastFetch] = useState<Date | null>(null)
   const [cooldown, setCooldown] = useState(0)
   
-  // Transform State Systems for Mapping/Panning/Zooming Engine
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(0.85) // Start tracking outward slightly to center coordinate frame cleanly
+  const [zoom, setZoom] = useState(0.85)
   const [isDragging, setIsDragging] = useState(false)
   
   const containerRef = useRef<HTMLDivElement>(null)
@@ -230,21 +237,22 @@ export default function Topology() {
   const clickStartTimestamp = useRef<number>(0)
   const cooldownTimer = useRef<number | null>(null)
 
-  // Automatic Viewport Centering Logic based on element scale
   const initializeCenterPosition = useCallback((width: number, height: number) => {
-    const virtualCanvasSize = 1000
-    const initialScale = Math.min(width, height) / virtualCanvasSize * 0.85
+    const virtualCanvasSizeX = 1000
+    const virtualCanvasSizeY = 1000
+    const initialScale = Math.min(width / virtualCanvasSizeX, height / virtualCanvasSizeY) * 0.95
     setZoom(initialScale)
+    
+    // Offset slightly to center the left-to-right graph
     setPan({
-      x: (width - virtualCanvasSize * initialScale) / 2,
-      y: (height - virtualCanvasSize * initialScale) / 2
+      x: (width - virtualCanvasSizeX * initialScale) / 2 + 50,
+      y: (height - virtualCanvasSizeY * initialScale) / 2
     })
   }, [])
 
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
       if (!entries || entries.length === 0 || topo === null) return
-      // Only execute centering structural logic on initialization parameters
       if (pan.x === 0 && pan.y === 0 && zoom === 0.85) {
         const { width, height } = entries[0].contentRect
         initializeCenterPosition(width, height)
@@ -304,7 +312,6 @@ export default function Topology() {
     fetchTopo()
   }, [fetchTopo])
 
-  // Mouse Input/Pointer Events Interceptors for spatial canvas movement
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.no-pan')) return
     setIsDragging(true)
@@ -332,14 +339,10 @@ export default function Topology() {
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
 
-    // Configure zoom scale coefficient factors
     const zoomFactor = 1.12
     let nextZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor
-    
-    // Hard ceiling constraints for map scaling stability
     nextZoom = Math.max(0.2, Math.min(nextZoom, 4.0))
 
-    // Mathematical adjustments to scale viewport directly into mouse pointer focal vector
     setPan(prevPan => ({
       x: mouseX - (mouseX - prevPan.x) * (nextZoom / zoom),
       y: mouseY - (mouseY - prevPan.y) * (nextZoom / zoom)
@@ -351,23 +354,21 @@ export default function Topology() {
   const selectedNode = layout.find(n => n.id === selected) ?? null
   const nodeMap = Object.fromEntries(layout.map(n => [n.id, n]))
 
+  // Bezier curve calculation for smooth left-to-right flow
   function edgePath(src: LayoutNode, tgt: LayoutNode): string {
-    const dx = tgt.x - src.x
-    const dy = tgt.y - src.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist === 0) return ''
-    const nx = dx / dist
-    const ny = dy / dist
-    const x1 = src.x + nx * src.r
-    const y1 = src.y + ny * src.r
-    const x2 = tgt.x - nx * tgt.r
-    const y2 = tgt.y - ny * tgt.r
-    return `M${x1},${y1} L${x2},${y2}`
+    const x1 = src.x + src.r
+    const y1 = src.y
+    const x2 = tgt.x - tgt.r
+    const y2 = tgt.y
+    
+    const cpX = (x2 - x1) / 2 // Control point offset
+    
+    // SVG Cubic Bezier Curve (C)
+    return `M${x1},${y1} C${x1 + cpX},${y1} ${x2 - cpX},${y2} ${x2},${y2}`
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)', width: '100%', userSelect: 'none' }}>
-      {/* Control Bar Actions */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px',
         background: 'var(--stats-bg)', borderBottom: '1px solid var(--border)', flexShrink: 0,
@@ -376,7 +377,6 @@ export default function Topology() {
           Live Network Topology Map
         </div>
         
-        {/* Navigation Help Indicator */}
         <div style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 16, display: 'inline-flex', gap: 10 }}>
           <span>🖱️ Drag to Move</span>
           <span>📜 Scroll to Zoom</span>
@@ -398,7 +398,6 @@ export default function Topology() {
         </div>
       </div>
 
-      {/* Dynamic Graphing Canvas Grid */}
       <div
         ref={containerRef}
         onMouseDown={handleMouseDown}
@@ -427,7 +426,6 @@ export default function Topology() {
             height="100%"
             style={{ display: 'block', pointerEvents: 'auto' }}
             onClick={e => {
-              // Ensure that shifting canvas around does not drop selection properties or trigger accidental closures
               const interactionDuration = Date.now() - clickStartTimestamp.current
               if (interactionDuration > 200) return 
 
@@ -436,9 +434,7 @@ export default function Topology() {
               }
             }}
           >
-            {/* Global Matrix Transform Node Wrappers */}
             <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-              {/* Layout Vector Connectors */}
               <g>
                 {topo.edges.map(edge => {
                   const src = nodeMap[edge.source]
@@ -450,7 +446,7 @@ export default function Topology() {
                       key={edge.id}
                       d={d}
                       stroke="var(--border)"
-                      strokeWidth={1.75}
+                      strokeWidth={2}
                       fill="none"
                       strokeOpacity={0.8}
                     />
@@ -458,7 +454,6 @@ export default function Topology() {
                 })}
               </g>
 
-              {/* Layout Node Systems */}
               <g>
                 {layout.map(n => (
                   <Node
@@ -467,7 +462,7 @@ export default function Topology() {
                     selected={selected === n.id}
                     onClick={() => {
                       const dragDuration = Date.now() - clickStartTimestamp.current
-                      if (dragDuration > 200) return // Drag event isolated successfully
+                      if (dragDuration > 200) return 
                       setSelected(selected === n.id ? null : n.id)
                     }}
                   />
@@ -477,7 +472,6 @@ export default function Topology() {
           </svg>
         )}
 
-        {/* Floating Detail Overlay */}
         {selectedNode && (
           <DetailPanel node={selectedNode} onClose={() => setSelected(null)} />
         )}
