@@ -26,7 +26,7 @@ export default function Header({ activeTab, tabs, onTabChange }: Props) {
         minHeight: 62,
         borderBottom: '1px solid var(--border-lt)',
       }}>
-        
+        <a
           href="https://www.hpe.com"
           target="_blank"
           rel="noreferrer"
