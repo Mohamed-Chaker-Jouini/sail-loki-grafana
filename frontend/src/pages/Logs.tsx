@@ -59,7 +59,7 @@ export default function Logs() {
     setCooldown(COOLDOWN_SECS)
     clearInterval(cooldownTimer.current)
     cooldownTimer.current = setInterval(() => {
-      setCooldown(prev => {
+      setCooldown((prev: number) => {
         if (prev <= 1) { clearInterval(cooldownTimer.current); return 0 }
         return prev - 1
       })
