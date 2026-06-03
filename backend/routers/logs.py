@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 router   = APIRouter(prefix="/api/logs", tags=["logs"])
-LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
+LOKI_URL = os.getenv("LOKI_URL", "http://sail-loki:3100")
 _CORS    = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store, no-cache"}
 
 RANGE_SECONDS = {

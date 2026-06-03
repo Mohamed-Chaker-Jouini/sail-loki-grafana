@@ -29,4 +29,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY --from=frontend-builder /app/dist ./backend/static
 
+ENV http_proxy=
+ENV https_proxy=
+ENV no_proxy=
+
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8880"]
