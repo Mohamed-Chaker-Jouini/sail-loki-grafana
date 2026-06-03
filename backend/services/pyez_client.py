@@ -7,14 +7,25 @@ from lxml import etree
 from typing import Any
 from .credentials import SRXCredentials
 
+# ── Book name constants ────────────────────────────────────────────────────────
+# Ansible ONLY ever writes to MORPHEUS_MANAGED. The UI NEVER writes there.
+# Manual entries (VPNs, physical servers, etc.) go into MANUAL_ENTRIES.
+# Quarantine is a deny-precedence set inside MORPHEUS_MANAGED that Ansible
+# does not touch (it only manages SET_<ZONE> sets, not SET_QUARANTINE).
+MORPHEUS_BOOK  = "MORPHEUS_MANAGED"
+MANUAL_BOOK    = "MANUAL_ENTRIES"
+QUARANTINE_SET = "SET_QUARANTINE"
+
+
 def get_topology(creds: SRXCredentials) -> dict:
     """Queries the vSRX and builds a real-time React Flow topology map."""
     book = get_address_book(creds)
-    
+    manual_book = get_address_book(creds, book_name=MANUAL_BOOK)
+    quarantined = get_quarantined_ips(creds)
+
     nodes_map = {}
     edges = []
-    
-    # 1. The Core Firewall Node
+
     nodes_map["srx"] = {
         "id": "srx",
         "title": "vSRX",
@@ -22,17 +33,15 @@ def get_topology(creds: SRXCredentials) -> dict:
         "mainStat": "Firewall",
         "color": "orange"
     }
-    
+
     assigned_ips = set()
-    
-    # 2. Build the Zone Rings
+
     for aset in book.get("address_sets", []):
         set_name = aset["name"]
+        if set_name == QUARANTINE_SET:
+            continue  # rendered separately
         zone_id = f"zone_{set_name.replace('SET_', '').lower()}"
-        
-        # Color coding logic based on your previous Morpheus payload
         color = "purple" if "WEB" in set_name.upper() else "blue"
-        
         nodes_map[zone_id] = {
             "id": zone_id,
             "title": set_name,
@@ -40,25 +49,47 @@ def get_topology(creds: SRXCredentials) -> dict:
             "mainStat": f"{len(aset['addresses'])} VMs",
             "color": color
         }
-        
-        # Connect SRX to Zone
         edges.append({"id": f"srx-{zone_id}", "source": "srx", "target": zone_id})
-        
-        # 3. Build the VM Nodes
+
+        for ip in aset.get("addresses", []):
+            assigned_ips.add(ip)
+            is_quarantined = ip in quarantined
+            if ip not in nodes_map:
+                nodes_map[ip] = {
+                    "id": ip,
+                    "title": ip,
+                    "subTitle": f"{set_name.replace('SET_', '')} VM",
+                    "mainStat": "QUARANTINED" if is_quarantined else "LIVE",
+                    "color": "red" if is_quarantined else "green",
+                    "source": "morpheus",
+                }
+            edges.append({"id": f"{zone_id}-{ip}", "source": zone_id, "target": ip})
+
+    # Manual entries
+    for aset in manual_book.get("address_sets", []):
+        set_name = aset["name"]
+        zone_id = f"zone_manual_{set_name.replace('SET_', '').lower()}"
+        nodes_map[zone_id] = {
+            "id": zone_id,
+            "title": f"{set_name} (Manual)",
+            "subTitle": "Manually managed",
+            "mainStat": f"{len(aset['addresses'])} IPs",
+            "color": "semi-dark-blue"
+        }
+        edges.append({"id": f"srx-{zone_id}", "source": "srx", "target": zone_id})
         for ip in aset.get("addresses", []):
             assigned_ips.add(ip)
             if ip not in nodes_map:
                 nodes_map[ip] = {
                     "id": ip,
                     "title": ip,
-                    "subTitle": f"{set_name.replace('SET_', '')} VM",
-                    "mainStat": "LIVE",
-                    "color": "green"
+                    "subTitle": "Manual Entry",
+                    "mainStat": "MANUAL",
+                    "color": "blue",
+                    "source": "manual",
                 }
-            # Connect Zone to VM
             edges.append({"id": f"{zone_id}-{ip}", "source": zone_id, "target": ip})
 
-    # 4. Handle "Orphaned" IPs (In the address book, but not assigned to a zone)
     for addr in book.get("addresses", []):
         ip = addr["name"]
         if ip not in assigned_ips and ip not in nodes_map:
@@ -69,18 +100,14 @@ def get_topology(creds: SRXCredentials) -> dict:
                 "mainStat": "NO ZONE",
                 "color": "red"
             }
-            # Orphans have no edges, the React layout will group them automatically
 
-    return {
-        "nodes": list(nodes_map.values()),
-        "edges": edges
-    }
+    return {"nodes": list(nodes_map.values()), "edges": edges}
+
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 @contextmanager
 def _connected_dev(creds: SRXCredentials, max_retries: int = 3, delay: int = 2):
-    """Context manager that yields a connected Device with retry logic."""
     dev = Device(
         host=creds.host,
         user=creds.username,
@@ -88,7 +115,6 @@ def _connected_dev(creds: SRXCredentials, max_retries: int = 3, delay: int = 2):
         port=creds.port,
         gather_facts=False,
     )
-    
     connected = False
     for attempt in range(max_retries):
         try:
@@ -97,9 +123,10 @@ def _connected_dev(creds: SRXCredentials, max_retries: int = 3, delay: int = 2):
             break
         except ConnectError as e:
             if attempt == max_retries - 1:
-                raise RuntimeError(f"Failed to connect to vSRX at {creds.host} after {max_retries} attempts: {e}")
+                raise RuntimeError(
+                    f"Failed to connect to vSRX at {creds.host} after {max_retries} attempts: {e}"
+                )
             time.sleep(delay)
-
     try:
         yield dev
     finally:
@@ -111,9 +138,10 @@ def _xml_text(element, path: str) -> str:
     el = element.find(path)
     return el.text.strip() if el is not None and el.text else ""
 
+
 # ── address book ───────────────────────────────────────────────────────────────
 
-def get_address_book(creds: SRXCredentials, book_name: str = "MORPHEUS_MANAGED") -> dict:
+def get_address_book(creds: SRXCredentials, book_name: str = MORPHEUS_BOOK) -> dict:
     """
     Returns the full address book as:
     {
@@ -135,8 +163,6 @@ def get_address_book(creds: SRXCredentials, book_name: str = "MORPHEUS_MANAGED")
         config = dev.rpc.get_config(filter_xml=etree.fromstring(filter_xml))
 
     ns = {"j": "http://xml.juniper.net/xnm/1.1/xnm"}
-    
-    # Fix for lxml FutureWarning: Avoid truth-testing elements directly
     book = config.find(".//address-book", ns)
     if book is None:
         book = config.find(".//address-book")
@@ -153,7 +179,11 @@ def get_address_book(creds: SRXCredentials, book_name: str = "MORPHEUS_MANAGED")
 
         for aset in book.findall("address-set"):
             set_name  = _xml_text(aset, "name")
-            set_addrs = [_xml_text(a, "name") for a in aset.findall("address") if _xml_text(a, "name")]
+            set_addrs = [
+                _xml_text(a, "name")
+                for a in aset.findall("address")
+                if _xml_text(a, "name")
+            ]
             if set_name:
                 address_sets.append({"name": set_name, "addresses": set_addrs})
 
@@ -164,43 +194,181 @@ def get_address_book(creds: SRXCredentials, book_name: str = "MORPHEUS_MANAGED")
     }
 
 
-def add_ip_to_zone(creds: SRXCredentials, zone: str, ip: str,
-                   book_name: str = "MORPHEUS_MANAGED") -> None:
-    """Add an IP to an address book and its zone set."""
+def get_enriched_address_book(creds: SRXCredentials) -> dict:
+    """
+    Returns MORPHEUS_MANAGED merged with MANUAL_ENTRIES, each IP tagged with
+    its source so the frontend can render them differently.
+
+    Shape:
+    {
+      "book_name": "MORPHEUS_MANAGED",
+      "quarantined": ["10.0.0.5", ...],
+      "address_sets": [
+        {
+          "name": "SET_WEB",
+          "addresses": [
+            {"ip": "10.0.0.1", "source": "morpheus", "quarantined": false},
+            {"ip": "10.0.0.9", "source": "manual",   "quarantined": false},
+          ]
+        },
+        ...
+      ]
+    }
+    """
+    morpheus_book = get_address_book(creds, MORPHEUS_BOOK)
+    manual_book   = get_address_book(creds, MANUAL_BOOK)
+    quarantined   = set(get_quarantined_ips(creds))
+
+    # Index manual IPs by zone set name for fast lookup
+    manual_by_set: dict[str, set[str]] = {}
+    for aset in manual_book.get("address_sets", []):
+        manual_by_set[aset["name"]] = set(aset["addresses"])
+
+    enriched_sets = []
+    for aset in morpheus_book.get("address_sets", []):
+        if aset["name"] == QUARANTINE_SET:
+            continue
+        manual_ips = manual_by_set.get(aset["name"], set())
+        # Combine: morpheus IPs + any manual IPs registered for the same zone
+        all_ips = list(dict.fromkeys(aset["addresses"] + list(manual_ips)))
+        enriched_sets.append({
+            "name": aset["name"],
+            "addresses": [
+                {
+                    "ip": ip,
+                    "source": "manual" if ip in manual_ips else "morpheus",
+                    "quarantined": ip in quarantined,
+                }
+                for ip in all_ips
+            ]
+        })
+
+    # Also include manual-only sets that don't exist in Morpheus book
+    morpheus_set_names = {s["name"] for s in morpheus_book.get("address_sets", [])}
+    for aset in manual_book.get("address_sets", []):
+        if aset["name"] not in morpheus_set_names:
+            enriched_sets.append({
+                "name": aset["name"],
+                "addresses": [
+                    {"ip": ip, "source": "manual", "quarantined": ip in quarantined}
+                    for ip in aset["addresses"]
+                ]
+            })
+
+    return {
+        "book_name":   MORPHEUS_BOOK,
+        "quarantined": list(quarantined),
+        "address_sets": enriched_sets,
+    }
+
+
+# ── quarantine ─────────────────────────────────────────────────────────────────
+
+def get_quarantined_ips(creds: SRXCredentials) -> list[str]:
+    """Returns IPs currently in SET_QUARANTINE."""
+    book = get_address_book(creds, MORPHEUS_BOOK)
+    for aset in book.get("address_sets", []):
+        if aset["name"] == QUARANTINE_SET:
+            return aset["addresses"]
+    return []
+
+
+def quarantine_ip(creds: SRXCredentials, ip: str) -> None:
+    """
+    Adds the IP to SET_QUARANTINE inside MORPHEUS_MANAGED.
+    The address object already exists (Ansible created it); we just add it
+    to the quarantine set. A deny policy for SET_QUARANTINE must exist
+    (see setup instructions in README). Ansible's reconciliation loop only
+    manages SET_<ZONE> sets, so this set is UI-owned and safe from being
+    wiped by automation.
+    """
+    commands = [
+        f"set security address-book {MORPHEUS_BOOK} address-set {QUARANTINE_SET} address {ip}",
+    ]
+    _apply_commands(creds, commands)
+
+
+def release_quarantine(creds: SRXCredentials, ip: str) -> None:
+    """Removes an IP from SET_QUARANTINE, restoring normal policy evaluation."""
+    commands = [
+        f"delete security address-book {MORPHEUS_BOOK} address-set {QUARANTINE_SET} address {ip}",
+    ]
+    _apply_commands(creds, commands)
+
+
+# ── manual entries (MANUAL_ENTRIES book) ──────────────────────────────────────
+
+def add_manual_ip(creds: SRXCredentials, zone: str, ip: str) -> None:
+    """
+    Adds an IP to MANUAL_ENTRIES book. This book is entirely UI-owned;
+    Ansible never touches it. Zone set name convention mirrors Morpheus:
+    SET_<ZONE> so policies can reference the same zone sets if needed.
+    """
     set_name = f"SET_{zone.upper()}"
     prefix   = ip if "/" in ip else f"{ip}/32"
     commands = [
-        f"set security address-book {book_name} address {ip} {prefix}",
-        f"set security address-book {book_name} address-set {set_name} address {ip}",
+        f"set security address-book {MANUAL_BOOK} address {ip} {prefix}",
+        f"set security address-book {MANUAL_BOOK} address-set {set_name} address {ip}",
     ]
     _apply_commands(creds, commands)
+
+
+def remove_manual_ip(creds: SRXCredentials, zone: str, ip: str) -> None:
+    """Removes a manual IP from its zone set in MANUAL_ENTRIES."""
+    set_name = f"SET_{zone.upper()}"
+    commands = [
+        f"delete security address-book {MANUAL_BOOK} address-set {set_name} address {ip}",
+        f"delete security address-book {MANUAL_BOOK} address {ip}",
+    ]
+    _apply_commands(creds, commands)
+
+
+# ── Morpheus-managed write guard ───────────────────────────────────────────────
+# These are kept for backwards compatibility but now raise if called on
+# MORPHEUS_MANAGED. The router layer enforces this too, but defence-in-depth.
+
+def add_ip_to_zone(creds: SRXCredentials, zone: str, ip: str,
+                   book_name: str = MORPHEUS_BOOK) -> None:
+    if book_name == MORPHEUS_BOOK:
+        raise PermissionError(
+            f"Direct writes to {MORPHEUS_BOOK} are blocked. "
+            "Use add_manual_ip() or let Ansible manage this book."
+        )
+    add_manual_ip(creds, zone, ip)
 
 
 def remove_ip_from_zone(creds: SRXCredentials, zone: str, ip: str,
-                        book_name: str = "MORPHEUS_MANAGED") -> None:
-    """Remove an IP from its zone set (does not delete the base address object)."""
-    set_name = f"SET_{zone.upper()}"
-    commands = [
-        f"delete security address-book {book_name} address-set {set_name} address {ip}",
-    ]
-    _apply_commands(creds, commands)
+                        book_name: str = MORPHEUS_BOOK) -> None:
+    if book_name == MORPHEUS_BOOK:
+        raise PermissionError(
+            f"Direct writes to {MORPHEUS_BOOK} are blocked. "
+            "Use remove_manual_ip() or quarantine_ip() instead."
+        )
+    remove_manual_ip(creds, zone, ip)
 
 
 def delete_address(creds: SRXCredentials, ip: str,
-                   book_name: str = "MORPHEUS_MANAGED") -> None:
-    """Delete the base address object entirely."""
-    commands = [
-        f"delete security address-book {book_name} address {ip}",
-    ]
+                   book_name: str = MORPHEUS_BOOK) -> None:
+    if book_name == MORPHEUS_BOOK:
+        raise PermissionError(
+            f"Direct deletes from {MORPHEUS_BOOK} are blocked. "
+            "Use quarantine_ip() for emergency blocks, or remove the AppTier "
+            "tag in Morpheus and let Ansible reconcile."
+        )
+    # For manual book, removing from all sets and deleting the object
+    manual_book = get_address_book(creds, MANUAL_BOOK)
+    commands = []
+    for aset in manual_book.get("address_sets", []):
+        if ip in aset["addresses"]:
+            commands.append(
+                f"delete security address-book {MANUAL_BOOK} "
+                f"address-set {aset['name']} address {ip}"
+            )
+    commands.append(f"delete security address-book {MANUAL_BOOK} address {ip}")
     _apply_commands(creds, commands)
 
 
 def get_policies(creds: SRXCredentials) -> list[dict]:
-    """
-    Returns security policies as a flat list:
-    [{"from_zone": "WEB_ZONE", "to_zone": "untrust",
-      "name": "DENY_ALL_OUT_WEB", "action": "deny"}, ...]
-    """
     filter_xml = """
     <configuration>
       <security>
@@ -215,8 +383,6 @@ def get_policies(creds: SRXCredentials) -> list[dict]:
     for ctx in config.iter("policy"):
         from_zone = ""
         to_zone   = ""
-        
-        # context block has from-zone-name / to-zone-name siblings
         parent = ctx.getparent()
         if parent is not None:
             fz = parent.find("from-zone-name")
@@ -224,11 +390,10 @@ def get_policies(creds: SRXCredentials) -> list[dict]:
             from_zone = fz.text.strip() if fz is not None and fz.text else ""
             to_zone   = tz.text.strip() if tz is not None and tz.text else ""
 
-        name_el   = ctx.find("name")
+        name_el     = ctx.find("name")
         policy_name = name_el.text.strip() if name_el is not None and name_el.text else ""
-
-        action = "unknown"
-        then   = ctx.find("then")
+        action      = "unknown"
+        then        = ctx.find("then")
         if then is not None:
             for a in ("permit", "deny", "reject"):
                 if then.find(a) is not None:

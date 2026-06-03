@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { showToast } from '../components/Toast'
 import { loadCredentialsFromCookie } from './Settings'
 
-// Helper cooldown manager function remains cleanly outside the component
+// ── cooldown helper ────────────────────────────────────────────────────────────
 function startCooldown(
   setter: React.Dispatch<React.SetStateAction<number>>,
   timerRef: React.MutableRefObject<ReturnType<typeof setInterval> | undefined>,
@@ -19,12 +19,19 @@ function startCooldown(
 }
 
 // ── types ──────────────────────────────────────────────────────────────────────
-interface AddressEntry { name: string; prefix: string }
-interface AddressSet { name: string; addresses: string[] }
-interface AddressBook {
+interface EnrichedAddress {
+  ip: string
+  source: 'morpheus' | 'manual'
+  quarantined: boolean
+}
+interface EnrichedSet {
+  name: string
+  addresses: EnrichedAddress[]
+}
+interface EnrichedBook {
   book_name: string
-  addresses: AddressEntry[]
-  address_sets: AddressSet[]
+  quarantined: string[]
+  address_sets: EnrichedSet[]
 }
 interface Policy {
   from_zone: string
@@ -33,7 +40,8 @@ interface Policy {
   action: string
 }
 
-// ── section header ─────────────────────────────────────────────────────────────
+// ── sub-components ─────────────────────────────────────────────────────────────
+
 function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div style={{
@@ -43,7 +51,7 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
     }}>
       <div style={{
         fontSize: 11, fontWeight: 700, color: 'var(--muted)',
-        textTransform: 'uppercase', letterSpacing: '.08em'
+        textTransform: 'uppercase', letterSpacing: '.08em',
       }}>
         {title}
       </div>
@@ -52,33 +60,158 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
   )
 }
 
+// Source badge: visually distinguishes automation-owned from manually managed IPs
+function SourceBadge({ source }: { source: 'morpheus' | 'manual' }) {
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, letterSpacing: '.06em',
+      textTransform: 'uppercase', padding: '1px 5px', borderRadius: 2,
+      background: source === 'morpheus' ? 'var(--hpe-green-lt)' : 'rgba(100,130,200,.13)',
+      color:      source === 'morpheus' ? 'var(--hpe-green-dk)' : '#4a60a0',
+      border:     source === 'morpheus' ? '1px solid var(--hpe-green-mid)' : '1px solid rgba(100,130,200,.35)',
+    }}>
+      {source === 'morpheus' ? '🤖 morpheus' : '✋ manual'}
+    </span>
+  )
+}
+
+// Inline callout explaining why a Morpheus IP can't be deleted
+function MorpheusGuardNote({ ip }: { ip: string }) {
+  return (
+    <div style={{
+      background: 'rgba(255,200,50,.08)',
+      border: '1px solid rgba(255,200,50,.35)',
+      borderRadius: 3, padding: '10px 12px',
+      fontSize: 11, color: 'var(--muted)',
+      lineHeight: 1.6, marginTop: 8,
+    }}>
+      <strong style={{ color: '#9a7a00' }}>⚠ Automation-managed IP</strong>
+      <br />
+      <code style={{ fontSize: 10 }}>{ip}</code> is owned by Morpheus. Deleting it here
+      would be overwritten on the next Ansible run. To permanently remove it,{' '}
+      <strong>remove the AppTier tag in Morpheus</strong> and let the automation reconcile.
+      <br />
+      For an emergency block, use <strong>Quarantine</strong> instead.
+    </div>
+  )
+}
+
+// IP chip — renders differently based on source and quarantine state
+function IpChip({
+  entry,
+  onQuarantine,
+  onRelease,
+  onDelete,
+}: {
+  entry: EnrichedAddress
+  onQuarantine: (ip: string) => void
+  onRelease: (ip: string) => void
+  onDelete: (ip: string) => void
+}) {
+  const [showGuard, setShowGuard] = useState(false)
+
+  const chipStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    borderRadius: 2, padding: '3px 8px',
+    fontFamily: 'monospace', fontSize: 11,
+    border: entry.quarantined
+      ? '1px solid var(--red)'
+      : entry.source === 'morpheus'
+        ? '1px solid var(--hpe-green-mid)'
+        : '1px solid rgba(100,130,200,.4)',
+    background: entry.quarantined
+      ? 'var(--red-lt)'
+      : entry.source === 'morpheus'
+        ? 'var(--hpe-green-lt)'
+        : 'rgba(100,130,200,.08)',
+    color: entry.quarantined
+      ? '#7A2020'
+      : entry.source === 'morpheus'
+        ? 'var(--hpe-green-dk)'
+        : '#3a50a0',
+  }
+
+  const btnBase: React.CSSProperties = {
+    border: 'none', background: 'none',
+    cursor: 'pointer', padding: '0 2px',
+    fontSize: 11, lineHeight: 1, fontWeight: 700,
+    textTransform: 'none', letterSpacing: 0,
+  }
+
+  return (
+    <div style={{ display: 'inline-block' }}>
+      <span style={chipStyle}>
+        {entry.ip}
+        {entry.quarantined && (
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#7A2020' }}>BLOCKED</span>
+        )}
+
+        {/* Quarantine action for Morpheus IPs */}
+        {entry.source === 'morpheus' && !entry.quarantined && (
+          <button
+            onClick={() => onQuarantine(entry.ip)}
+            title="Quarantine — emergency block without breaking automation"
+            style={{ ...btnBase, color: '#cc8800', fontSize: 13 }}
+          >⊘</button>
+        )}
+
+        {/* Release from quarantine */}
+        {entry.quarantined && (
+          <button
+            onClick={() => onRelease(entry.ip)}
+            title="Release from quarantine"
+            style={{ ...btnBase, color: 'var(--hpe-green-dk)' }}
+          >✓</button>
+        )}
+
+        {/* Delete — only for manual IPs, blocked for Morpheus */}
+        {entry.source === 'manual' && !entry.quarantined && (
+          <button
+            onClick={() => onDelete(entry.ip)}
+            title={`Delete manual entry ${entry.ip}`}
+            style={{ ...btnBase, color: 'var(--red)' }}
+          >×</button>
+        )}
+
+        {/* Morpheus IP — show guard explanation on click */}
+        {entry.source === 'morpheus' && !entry.quarantined && (
+          <button
+            onClick={() => setShowGuard(g => !g)}
+            title="Why can't I delete this?"
+            style={{ ...btnBase, color: 'var(--muted)', fontSize: 12 }}
+          >?</button>
+        )}
+      </span>
+      {showGuard && <MorpheusGuardNote ip={entry.ip} />}
+    </div>
+  )
+}
+
+
 // ── main component ─────────────────────────────────────────────────────────────
 export default function Firewall() {
-  // Hooks successfully brought inside the component body where they belong
-  const [cooldownAB, setCooldownAB] = useState(0)
+  const [cooldownAB, setCooldownAB]   = useState(0)
   const [cooldownPol, setCooldownPol] = useState(0)
-  const abTimer = useRef<ReturnType<typeof setInterval>>()
+  const abTimer  = useRef<ReturnType<typeof setInterval>>()
   const polTimer = useRef<ReturnType<typeof setInterval>>()
 
-  const [book, setBook] = useState<AddressBook | null>(null)
+  const [book, setBook]         = useState<EnrichedBook | null>(null)
   const [policies, setPolicies] = useState<Policy[]>([])
-  const [loadingAB, setLoadingAB] = useState(false)
+  const [loadingAB, setLoadingAB]   = useState(false)
   const [loadingPol, setLoadingPol] = useState(false)
   const [error, setError] = useState('')
 
-  // add-ip form
+  // add manual IP form
   const [addZone, setAddZone] = useState('')
-  const [addIp, setAddIp] = useState('')
-  const [adding, setAdding] = useState(false)
+  const [addIp, setAddIp]     = useState('')
+  const [adding, setAdding]   = useState(false)
 
-  // remove-ip form
-  const [remZone, setRemZone] = useState('')
-  const [remIp, setRemIp] = useState('')
-  const [removing, setRemoving] = useState(false)
+  // confirm-quarantine modal state
+  const [quarantineTarget, setQuarantineTarget] = useState<string | null>(null)
+  const [quarantining, setQuarantining] = useState(false)
 
   const configured = !!loadCredentialsFromCookie()
 
-  // Clean up timers dynamically if the page unmounts
   useEffect(() => {
     return () => {
       clearInterval(abTimer.current)
@@ -90,7 +223,7 @@ export default function Firewall() {
     if (cooldownAB > 0) return
     setLoadingAB(true); setError('')
     try {
-      const r = await fetch('/api/firewall/address-book')
+      const r = await fetch('/api/firewall/address-book/enriched')
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail || r.statusText) }
       setBook(await r.json())
       startCooldown(setCooldownAB, abTimer)
@@ -118,17 +251,17 @@ export default function Firewall() {
     if (configured) { fetchBook(); fetchPolicies() }
   }, [configured, fetchBook, fetchPolicies])
 
-  async function handleAddIp() {
+  async function handleAddManualIp() {
     if (!addZone || !addIp) { showToast('Zone and IP are required'); return }
     setAdding(true)
     try {
-      const r = await fetch('/api/firewall/address-book/add-ip', {
+      const r = await fetch('/api/firewall/manual/add-ip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ zone: addZone, ip: addIp }),
       })
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
-      showToast(`Added ${addIp} to ${addZone}`)
+      showToast(`Added ${addIp} to ${addZone} (manual entry)`)
       setAddIp('')
       fetchBook()
     } catch (e: any) {
@@ -138,36 +271,52 @@ export default function Firewall() {
     }
   }
 
-  async function handleRemoveIp() {
-    if (!remZone || !remIp) { showToast('Zone and IP are required'); return }
-    setRemoving(true)
+  async function handleDeleteManual(ip: string) {
+    if (!confirm(`Delete manual entry ${ip}? This cannot be undone.`)) return
     try {
-      const r = await fetch('/api/firewall/address-book/remove-ip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ zone: remZone, ip: remIp }),
-      })
-      if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
-      showToast(`Removed ${remIp} from ${remZone}`)
-      setRemIp('')
-      fetchBook()
-    } catch (e: any) {
-      showToast('Error: ' + e.message)
-    } finally {
-      setRemoving(false)
-    }
-  }
-
-  async function handleDeleteAddress(ip: string) {
-    if (!confirm(`Delete address object ${ip} entirely?`)) return
-    try {
-      const r = await fetch('/api/firewall/address-book/delete-address', {
+      const r = await fetch('/api/firewall/manual/delete-address', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ip }),
       })
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
-      showToast(`Deleted ${ip}`)
+      showToast(`Deleted manual entry ${ip}`)
+      fetchBook()
+    } catch (e: any) {
+      showToast('Error: ' + e.message)
+    }
+  }
+
+  async function confirmQuarantine() {
+    if (!quarantineTarget) return
+    setQuarantining(true)
+    try {
+      const r = await fetch('/api/firewall/quarantine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: quarantineTarget }),
+      })
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
+      showToast(`⊘ ${quarantineTarget} quarantined — traffic blocked`)
+      setQuarantineTarget(null)
+      fetchBook()
+    } catch (e: any) {
+      showToast('Error: ' + e.message)
+    } finally {
+      setQuarantining(false)
+    }
+  }
+
+  async function handleRelease(ip: string) {
+    if (!confirm(`Release ${ip} from quarantine? Traffic will resume.`)) return
+    try {
+      const r = await fetch('/api/firewall/quarantine/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip }),
+      })
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
+      showToast(`✓ ${ip} released from quarantine`)
       fetchBook()
     } catch (e: any) {
       showToast('Error: ' + e.message)
@@ -186,8 +335,62 @@ export default function Firewall() {
     )
   }
 
+  const morpheusCount = book?.address_sets
+    .flatMap(s => s.addresses)
+    .filter(a => a.source === 'morpheus').length ?? 0
+  const manualCount = book?.address_sets
+    .flatMap(s => s.addresses)
+    .filter(a => a.source === 'manual').length ?? 0
+  const quarantineCount = book?.quarantined.length ?? 0
+
   return (
     <div style={{ padding: 28 }}>
+
+      {/* ── quarantine confirmation modal ── */}
+      {quarantineTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 4, padding: 28, maxWidth: 420, width: '90%',
+            boxShadow: '0 8px 32px rgba(0,0,0,.3)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+              ⊘ Quarantine IP
+            </div>
+            <div style={{
+              background: 'var(--red-lt)', border: '1px solid var(--red)',
+              borderRadius: 3, padding: '10px 14px',
+              fontSize: 12, color: '#7A2020', marginBottom: 16,
+            }}>
+              <strong>{quarantineTarget}</strong> will be added to{' '}
+              <code>SET_QUARANTINE</code>, which has a deny-all policy.
+              All traffic to/from this IP will be blocked immediately.
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 20, lineHeight: 1.6 }}>
+              The IP remains in its original zone set — Ansible won't fight you.
+              Release quarantine from this page when the incident is resolved.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setQuarantineTarget(null)} disabled={quarantining}>
+                Cancel
+              </button>
+              <button
+                className="danger"
+                onClick={confirmQuarantine}
+                disabled={quarantining}
+              >
+                {quarantining ? 'Quarantining…' : '⊘ Confirm Quarantine'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── error banner ── */}
       {error && (
         <div style={{
           background: 'var(--red-lt)', border: '1px solid var(--red)',
@@ -200,8 +403,44 @@ export default function Firewall() {
         </div>
       )}
 
+      {/* ── legend / ownership notice ── */}
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 3, padding: '10px 16px', marginBottom: 24,
+        display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap',
+        fontSize: 11,
+      }}>
+        <span style={{ color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+          Address book ownership
+        </span>
+        <span>
+          <span style={{
+            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+            background: 'var(--hpe-green)', marginRight: 6,
+          }} />
+          <strong>{morpheusCount}</strong> Morpheus-managed — read-only, modified via AppTier tags
+        </span>
+        <span>
+          <span style={{
+            display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+            background: '#4a60a0', marginRight: 6,
+          }} />
+          <strong>{manualCount}</strong> Manual entries — editable here
+        </span>
+        {quarantineCount > 0 && (
+          <span>
+            <span style={{
+              display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+              background: 'var(--red)', marginRight: 6,
+            }} />
+            <strong>{quarantineCount}</strong> Quarantined — traffic blocked
+          </span>
+        )}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
-        {/* ── left column ── */}
+
+        {/* ── left column: address book ── */}
         <div>
           <SectionHeader
             title={`Address Book${book ? ` — ${book.book_name}` : ''}`}
@@ -217,43 +456,29 @@ export default function Firewall() {
           {book && !loadingAB && (
             <>
               {book.address_sets.map(set => (
-                <div key={set.name} style={{ marginBottom: 16 }}>
+                <div key={set.name} style={{ marginBottom: 20 }}>
                   <div style={{
                     fontSize: 10, fontWeight: 700, color: 'var(--hpe-green-dk)',
                     textTransform: 'uppercase', letterSpacing: '.08em',
-                    marginBottom: 6,
+                    marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8,
                   }}>
                     {set.name.replace('SET_', '')} zone
-                    <span style={{ color: 'var(--muted)', marginLeft: 8, fontWeight: 400 }}>
-                      ({set.addresses.length} IPs)
+                    <span style={{ color: 'var(--muted)', fontWeight: 400 }}>
+                      ({set.addresses.length} IPs —{' '}
+                      {set.addresses.filter(a => a.source === 'morpheus').length} managed,{' '}
+                      {set.addresses.filter(a => a.source === 'manual').length} manual)
                     </span>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {set.addresses.map(ip => (
-                      <span
-                        key={ip}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          background: 'var(--hpe-green-lt)',
-                          border: '1px solid var(--hpe-green-mid)',
-                          borderRadius: 2, padding: '2px 8px',
-                          fontFamily: 'monospace', fontSize: 11,
-                          color: 'var(--hpe-green-dk)',
-                        }}
-                      >
-                        {ip}
-                        <button
-                          onClick={() => handleDeleteAddress(ip)}
-                          title={`Delete ${ip}`}
-                          style={{
-                            border: 'none', background: 'none',
-                            color: 'var(--red)', cursor: 'pointer',
-                            padding: '0 2px', fontSize: 11, lineHeight: 1,
-                            fontWeight: 700, textTransform: 'none',
-                            letterSpacing: 0,
-                          }}
-                        >×</button>
-                      </span>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {set.addresses.map(entry => (
+                      <IpChip
+                        key={entry.ip}
+                        entry={entry}
+                        onQuarantine={setQuarantineTarget}
+                        onRelease={handleRelease}
+                        onDelete={handleDeleteManual}
+                      />
                     ))}
                     {set.addresses.length === 0 && (
                       <span style={{ color: 'var(--muted)', fontSize: 11 }}>empty</span>
@@ -264,18 +489,32 @@ export default function Firewall() {
 
               {book.address_sets.length === 0 && (
                 <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                  No address sets found in {book.book_name}.
+                  No address sets found.
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* ── right column ── */}
+        {/* ── right column: forms + policies ── */}
         <div>
-          <SectionHeader title="Add IP to Zone" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+
+          {/* Add Manual IP */}
+          <SectionHeader title="Add Manual IP to Zone" />
+          <div style={{
+            background: 'rgba(100,130,200,.06)',
+            border: '1px solid rgba(100,130,200,.25)',
+            borderRadius: 3, padding: '14px 16px', marginBottom: 28,
+          }}>
+            <div style={{
+              fontSize: 11, color: '#4a60a0', marginBottom: 12, lineHeight: 1.6,
+            }}>
+              For IPs <strong>not managed by Morpheus</strong> — physical servers, VPN
+              endpoints, static infrastructure. These are stored in{' '}
+              <code style={{ fontSize: 10 }}>MANUAL_ENTRIES</code> and will never be
+              touched by Ansible.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{
                   fontSize: 10, fontWeight: 700, color: 'var(--muted)',
@@ -299,42 +538,31 @@ export default function Firewall() {
                 />
               </div>
             </div>
-            <button className="primary" onClick={handleAddIp} disabled={adding}>
-              {adding ? 'Adding…' : '+ Add IP'}
+            <button className="primary" onClick={handleAddManualIp} disabled={adding}>
+              {adding ? 'Adding…' : '+ Add Manual IP'}
             </button>
           </div>
 
-          <SectionHeader title="Remove IP from Zone" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 28 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{
-                  fontSize: 10, fontWeight: 700, color: 'var(--muted)',
-                  textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4,
-                }}>Zone</div>
-                <input
-                  type="text" value={remZone}
-                  onChange={e => setRemZone(e.target.value.toUpperCase())}
-                  placeholder="WEB" style={{ width: '100%' }}
-                />
-              </div>
-              <div style={{ flex: 2 }}>
-                <div style={{
-                  fontSize: 10, fontWeight: 700, color: 'var(--muted)',
-                  textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4,
-                }}>IP Address</div>
-                <input
-                  type="text" value={remIp}
-                  onChange={e => setRemIp(e.target.value)}
-                  placeholder="10.0.0.1" style={{ width: '100%' }}
-                />
-              </div>
-            </div>
-            <button className="danger" onClick={handleRemoveIp} disabled={removing}>
-              {removing ? 'Removing…' : '− Remove IP'}
-            </button>
+          {/* Morpheus notice — replaces the old Remove IP form */}
+          <SectionHeader title="Morpheus-managed IPs" />
+          <div style={{
+            background: 'var(--hpe-green-lt)',
+            border: '1px solid var(--hpe-green-mid)',
+            borderRadius: 3, padding: '14px 16px', marginBottom: 28,
+            fontSize: 11, color: 'var(--hpe-green-dk)', lineHeight: 1.8,
+          }}>
+            <strong>IPs labelled 🤖 morpheus are managed exclusively by Ansible.</strong>
+            <br />
+            To add one: assign an <code>AppTier</code> tag to the VM in Morpheus.
+            <br />
+            To remove one: remove the <code>AppTier</code> tag — the next reconciliation
+            run will clean it up automatically.
+            <br />
+            For an emergency block without breaking automation: use the{' '}
+            <strong>⊘ quarantine button</strong> on the IP chip.
           </div>
 
+          {/* Security Policies */}
           <SectionHeader
             title="Security Policies"
             action={
