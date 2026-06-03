@@ -5,11 +5,7 @@ services:
     container_name: sail-app
     ports:
       - "8880:8880"
-    volumes:
-      - ./topology:/data:rw
     environment:
-      - DATA_DIR=/data
-      - MAX_HISTORY_ENTRIES=1000
       - LOKI_URL=http://sail-loki:3100
       - NO_PROXY=localhost,127.0.0.1,sail-loki,10.202.52.0/24
       - no_proxy=localhost,127.0.0.1,sail-loki,10.202.52.0/24
