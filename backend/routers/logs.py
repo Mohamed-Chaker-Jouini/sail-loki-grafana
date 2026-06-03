@@ -51,7 +51,12 @@ def query_logs(
 
     try:
         req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=10) as resp:
+
+        # Disable Proxies
+        proxy_handler = urllib.request.ProxyHandler({})
+        opener = urllib.request.build_opener(proxy_handler) 
+
+        with opener.open(req, timeout=10) as resp:
             raw = json.loads(resp.read())
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Loki unreachable: {e}")
