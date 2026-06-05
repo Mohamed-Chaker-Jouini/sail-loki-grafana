@@ -20,13 +20,24 @@ interface TopologyData {
   edges: TopoEdge[]
 }
 
-let cachedTopology: TopologyData | null = null
-let cachedLastFetch: Date | null = null
-let cachedPan = {x: 0, y: 0}
-let cachedZoom = 0.85
-let cachedSelected: string | null = null
+// ── Stable module-level cache (survives remounts, not page refresh) ────────────
+// These are plain objects — never mutated during render. Only written in event
+// handlers / effects so there are no stale-closure or double-render hazards.
+const cache: {
+  topology:  TopologyData | null
+  lastFetch: Date | null
+  pan:       { x: number; y: number }
+  zoom:      number
+  selected:  string | null
+} = {
+  topology:  null,
+  lastFetch: null,
+  pan:       { x: 0, y: 0 },
+  zoom:      0.85,
+  selected:  null,
+}
 
-const TOPOLOGY_REFRESH_MS = 10000
+const TOPOLOGY_REFRESH_MS = 10_000
 
 const NODE_COLORS: Record<string, string> = {
   orange:          'var(--orange, #CC4E00)',
@@ -50,41 +61,27 @@ interface LayoutNode extends TopoNode {
 
 // ── Horizontal Layered Layout ─────────────────────────────────────────────────
 function buildLayout(topo: TopologyData): LayoutNode[] {
-  const layerX = {
-    firewall: 200,
-    zones: 500,
-    vms: 850
-  }
+  const layerX = { firewall: 200, zones: 500, vms: 850 }
   const centerY = 500
 
-  const srx = topo.nodes.find(n => n.id === 'srx')
+  const srx   = topo.nodes.find(n => n.id === 'srx')
   const zones = topo.nodes.filter(n => n.id.startsWith('zone_'))
-  const vms = topo.nodes.filter(n => !n.id.startsWith('zone_') && n.id !== 'srx')
+  const vms   = topo.nodes.filter(n => !n.id.startsWith('zone_') && n.id !== 'srx')
 
   const result: LayoutNode[] = []
 
-  // 1. Layer 1: Firewall
-  if (srx) {
-    result.push({ ...srx, x: layerX.firewall, y: centerY, r: 42 })
-  }
+  if (srx) result.push({ ...srx, x: layerX.firewall, y: centerY, r: 42 })
 
-  // 2. Layer 2: Zones
   const zoneSpacing = Math.min(240, 800 / Math.max(1, zones.length))
-  const zoneStartY = centerY - ((zones.length - 1) * zoneSpacing) / 2
+  const zoneStartY  = centerY - ((zones.length - 1) * zoneSpacing) / 2
   const zoneYMap: Record<string, number> = {}
 
   zones.forEach((z, i) => {
     const y = zoneStartY + i * zoneSpacing
     zoneYMap[z.id] = y
-    result.push({
-      ...z,
-      x: layerX.zones,
-      y: y,
-      r: 34,
-    })
+    result.push({ ...z, x: layerX.zones, y, r: 34 })
   })
 
-  // 3. Layer 3: VMs
   const zoneVms: Record<string, string[]> = {}
   topo.edges.forEach(e => {
     if (e.source.startsWith('zone_')) {
@@ -94,44 +91,31 @@ function buildLayout(topo: TopologyData): LayoutNode[] {
   })
 
   const placedVms = new Set<string>()
-
   Object.entries(zoneVms).forEach(([zoneId, vmIds]) => {
-    const parentY = zoneYMap[zoneId] ?? centerY
-    const vmSpacing = 75 
-    const vmStartY = parentY - ((vmIds.length - 1) * vmSpacing) / 2
-
+    const parentY   = zoneYMap[zoneId] ?? centerY
+    const vmStartY  = parentY - ((vmIds.length - 1) * 75) / 2
     vmIds.forEach((vmId, i) => {
       const vm = vms.find(v => v.id === vmId)
       if (!vm) return
       placedVms.add(vmId)
-      result.push({
-        ...vm,
-        x: layerX.vms,
-        y: vmStartY + i * vmSpacing,
-        r: 28,
-      })
+      result.push({ ...vm, x: layerX.vms, y: vmStartY + i * 75, r: 28 })
     })
   })
 
-  // 4. Orphan VMs
-  const orphans = vms.filter(v => !placedVms.has(v.id))
+  const orphans      = vms.filter(v => !placedVms.has(v.id))
   const orphanStartY = centerY - ((orphans.length - 1) * 75) / 2
   orphans.forEach((vm, i) => {
-    result.push({
-      ...vm,
-      x: layerX.vms,
-      y: orphanStartY + i * 75,
-      r: 28,
-    })
+    result.push({ ...vm, x: layerX.vms, y: orphanStartY + i * 75, r: 28 })
   })
 
   return result
 }
 
+// ── Sub-components ────────────────────────────────────────────────────────────
 function Node({ n, selected, onClick }: { n: LayoutNode; selected: boolean; onClick: () => void }) {
-  const fill = resolveColor(n.color)
+  const fill   = resolveColor(n.color)
   const stroke = selected ? 'var(--text, #1A1A1A)' : 'rgba(0,0,0,0.12)'
-  const sw = selected ? 3 : 1.5
+  const sw     = selected ? 3 : 1.5
 
   return (
     <g onClick={onClick} style={{ cursor: 'pointer' }} transform={`translate(${n.x},${n.y})`}>
@@ -202,8 +186,8 @@ function DetailPanel({ node, onClose }: { node: LayoutNode; onClose: () => void 
         >×</button>
       </div>
       {[
-        ['Node ID', node.id],
-        ['Address/Sub', node.subTitle],
+        ['Node ID',      node.id],
+        ['Address/Sub',  node.subTitle],
         ['Status Scope', node.mainStat],
       ].map(([label, value]) => value ? (
         <div key={label} style={{ marginBottom: 10 }}>
@@ -215,7 +199,7 @@ function DetailPanel({ node, onClose }: { node: LayoutNode; onClose: () => void 
             fontSize: 11, fontFamily: 'monospace',
             background: 'var(--bg)', padding: '4px 8px',
             border: '1px solid var(--border-lt)', borderRadius: 2,
-            color: 'var(--text-2)', overflowX: 'auto'
+            color: 'var(--text-2)', overflowX: 'auto',
           }}>{value}</div>
         </div>
       ) : null)}
@@ -223,65 +207,66 @@ function DetailPanel({ node, onClose }: { node: LayoutNode; onClose: () => void 
   )
 }
 
+// ── Main component ────────────────────────────────────────────────────────────
 export default function Topology() {
-  const [topo, setTopo] = useState<TopologyData | null>(() => cachedTopology)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [selected, setSelected] = useState<string | null>(() => cachedSelected)
-  const [lastFetch, setLastFetch] = useState<Date | null>(() => cachedLastFetch)
-  
-  const [pan, setPan] = useState(() => cachedPan)
-  const [zoom, setZoom] = useState(() => cachedZoom)
+  const [topo,      setTopo]      = useState<TopologyData | null>(() => cache.topology)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [selected,  setSelected]  = useState<string | null>(() => cache.selected)
+  const [lastFetch, setLastFetch] = useState<Date | null>(() => cache.lastFetch)
+  const [pan,       setPan]       = useState(() => cache.pan)
+  const [zoom,      setZoom]      = useState(() => cache.zoom)
   const [isDragging, setIsDragging] = useState(false)
-  
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dragStart = useRef({ x: 0, y: 0 })
-  const clickStartTimestamp = useRef<number>(0)
 
+  const containerRef        = useRef<HTMLDivElement>(null)
+  const dragStart           = useRef({ x: 0, y: 0 })
+  const clickStartTimestamp = useRef(0)
+
+  // ── Refs that always reflect current state ─────────────────────────────────
+  // Using refs here avoids including pan/zoom in fetchTopo's dependency array,
+  // which previously caused the polling interval to restart on every pan/zoom.
+  const panRef      = useRef(pan)
+  const zoomRef     = useRef(zoom)
+  const selectedRef = useRef(selected)
+
+  useEffect(() => { panRef.current      = pan;      cache.pan      = pan      }, [pan])
+  useEffect(() => { zoomRef.current     = zoom;     cache.zoom     = zoom     }, [zoom])
+  useEffect(() => { selectedRef.current = selected; cache.selected = selected }, [selected])
+
+  // ── Canvas centering ───────────────────────────────────────────────────────
   const initializeCenterPosition = useCallback((width: number, height: number) => {
-    const virtualCanvasSizeX = 1000
-    const virtualCanvasSizeY = 1000
-    const initialScale = Math.min(width / virtualCanvasSizeX, height / virtualCanvasSizeY) * 0.95
-
-    cachedZoom = initialScale
-    setZoom(initialScale)
-    
-    const nextPan = {
-      x: (width - virtualCanvasSizeX * initialScale) / 2 + 50,
-      y: (height - virtualCanvasSizeY * initialScale) / 2
+    const virtualW = 1000, virtualH = 1000
+    const scale    = Math.min(width / virtualW, height / virtualH) * 0.95
+    const nextPan  = {
+      x: (width  - virtualW * scale) / 2 + 50,
+      y: (height - virtualH * scale) / 2,
     }
-
-    cachedPan = nextPan
+    // Write to both state (triggers render) and cache (survives remount)
+    setZoom(scale)
     setPan(nextPan)
-  }, [])
+  }, [])  // no external deps — safe to be stable
 
-  useEffect(() => {
-    cachedPan = pan
-  }, [pan])
-
-  useEffect(() => {
-    cachedZoom = zoom
-  }, [zoom])
-
-  useEffect(() => {
-    cachedSelected = selected
-  }, [selected])
-
+  // ── Resize observer: center only on first load ─────────────────────────────
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
-      if (!entries || entries.length === 0 || topo === null) return
-      if (pan.x === 0 && pan.y === 0 && zoom === 0.85) {
+      if (!entries.length || cache.topology === null) return
+      // Only auto-center if pan/zoom are still at their initial defaults
+      if (panRef.current.x === 0 && panRef.current.y === 0 && zoomRef.current === 0.85) {
         const { width, height } = entries[0].contentRect
         initializeCenterPosition(width, height)
       }
     })
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
-  }, [topo, initializeCenterPosition, pan.x, pan.y, zoom])
+  }, [initializeCenterPosition])
+  // NOTE: `topo` removed from deps — the ResizeObserver itself doesn't depend
+  // on topo; we gate on cache.topology (the ref-equivalent) inside the callback.
 
-  // Fetches data instantly
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // fetchTopo no longer closes over pan/zoom state — it reads from refs instead.
+  // This means the polling interval is created exactly once and never restarted.
   const fetchTopo = useCallback(async (isBackgroundSync = false) => {
-    const hasCanvasData = cachedTopology !== null
+    const hasCanvasData = cache.topology !== null
 
     if (!isBackgroundSync && !hasCanvasData) setLoading(true)
 
@@ -289,99 +274,87 @@ export default function Topology() {
       const r = await fetch('/topology.json?t=' + Date.now())
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
 
-      const data = await r.json()
+      const data: TopologyData = await r.json()
       if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
         throw new Error('Data structure parsing error.')
       }
 
-      cachedTopology = data
-      cachedLastFetch = new Date()
+      cache.topology  = data
+      cache.lastFetch = new Date()
 
       setTopo(data)
-      setLastFetch(cachedLastFetch)
-
+      setLastFetch(cache.lastFetch)
       setError('')
 
-      // Only center if it's the very first load
-      if (!hasCanvasData && containerRef.current && pan.x === 0 && pan.y === 0) {
-        const rect = containerRef.current.getBoundingClientRect()
-        initializeCenterPosition(rect.width, rect.height)
+      // Center canvas only on the very first successful load
+      if (!hasCanvasData && containerRef.current && panRef.current.x === 0 && panRef.current.y === 0) {
+        const { width, height } = containerRef.current.getBoundingClientRect()
+        initializeCenterPosition(width, height)
       }
     } catch (e: any) {
       const message = e?.message ?? 'Failed to refresh topology'
-
-      if (!cachedTopology) {
-        setError(message)
-      } else {
-        setError(`Showing last known topology. Refresh failed: ${message}`)
-      }
-
+      setError(cache.topology ? `Showing last known topology. Refresh failed: ${message}` : message)
       if (!isBackgroundSync) showToast('Topology: ' + message)
     } finally {
       setLoading(false)
     }
-  }, [initializeCenterPosition, pan.x])
+  }, [initializeCenterPosition])
+  // pan / zoom are intentionally absent — read via refs above
 
+  // ── Polling: stable interval, never restarted by pan/zoom changes ──────────
   useEffect(() => {
-    fetchTopo(cachedTopology !== null)
+    fetchTopo(cache.topology !== null)
+    const id = setInterval(() => fetchTopo(true), TOPOLOGY_REFRESH_MS)
+    return () => clearInterval(id)
+  }, [fetchTopo])  // fetchTopo is now stable (no pan.x dep)
 
-    const interval = setInterval(() => {
-      fetchTopo(true) // Silent background fetch
-    }, TOPOLOGY_REFRESH_MS)
-    return () => clearInterval(interval)
-  }, [fetchTopo])
-
+  // ── Pan & zoom handlers ────────────────────────────────────────────────────
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.no-pan')) return
     setIsDragging(true)
     clickStartTimestamp.current = Date.now()
-    dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
+    dragStart.current = { x: e.clientX - panRef.current.x, y: e.clientY - panRef.current.y }
   }
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging) return
-    setPan({
-      x: e.clientX - dragStart.current.x,
-      y: e.clientY - dragStart.current.y
-    })
+    setPan({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y })
   }
 
-  const handleMouseUp = () => {
-    setIsDragging(false)
-  }
+  const handleMouseUp = () => setIsDragging(false)
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
     if (!containerRef.current) return
 
-    const rect = containerRef.current.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left
-    const mouseY = e.clientY - rect.top
-
+    const rect       = containerRef.current.getBoundingClientRect()
+    const mouseX     = e.clientX - rect.left
+    const mouseY     = e.clientY - rect.top
     const zoomFactor = 1.12
-    let nextZoom = e.deltaY < 0 ? zoom * zoomFactor : zoom / zoomFactor
-    nextZoom = Math.max(0.2, Math.min(nextZoom, 4.0))
+    const currentZoom = zoomRef.current
+    const nextZoom   = Math.max(0.2, Math.min(e.deltaY < 0 ? currentZoom * zoomFactor : currentZoom / zoomFactor, 4.0))
 
-    setPan(prevPan => ({
-      x: mouseX - (mouseX - prevPan.x) * (nextZoom / zoom),
-      y: mouseY - (mouseY - prevPan.y) * (nextZoom / zoom)
-    }))
+    // Read current pan from ref to avoid stale closure
+    setPan({
+      x: mouseX - (mouseX - panRef.current.x) * (nextZoom / currentZoom),
+      y: mouseY - (mouseY - panRef.current.y) * (nextZoom / currentZoom),
+    })
     setZoom(nextZoom)
   }
 
-  const layout = topo ? buildLayout(topo) : []
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const layout       = topo ? buildLayout(topo) : []
   const selectedNode = layout.find(n => n.id === selected) ?? null
-  const nodeMap = Object.fromEntries(layout.map(n => [n.id, n]))
+  const nodeMap      = Object.fromEntries(layout.map(n => [n.id, n]))
 
   function edgePath(src: LayoutNode, tgt: LayoutNode): string {
-    const x1 = src.x + src.r
-    const y1 = src.y
-    const x2 = tgt.x - tgt.r
-    const y2 = tgt.y
+    const x1 = src.x + src.r, y1 = src.y
+    const x2 = tgt.x - tgt.r, y2 = tgt.y
     const cpX = (x2 - x1) / 2
     return `M${x1},${y1} C${x1 + cpX},${y1} ${x2 - cpX},${y2} ${x2},${y2}`
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)', width: '100%', userSelect: 'none' }}>
       <div style={{
@@ -391,30 +364,22 @@ export default function Topology() {
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
           Live Network Topology Map
         </div>
-        
         <div style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 16, display: 'inline-flex', gap: 10 }}>
           <span>Drag to Move</span>
           <span>Scroll to Zoom</span>
         </div>
-
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
           {error && topo && (
             <span style={{ fontSize: 11, color: 'var(--yellow, #A8750A)', fontWeight: 700 }}>
               ⚠ Last refresh failed
             </span>
           )}
-
           {lastFetch && (
             <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
               Live Synced: {lastFetch.toLocaleTimeString()}
             </span>
           )}
-          {/* Button is now instant and never goes on cooldown */}
-          <button
-            onClick={() => fetchTopo(false)}
-            disabled={loading}
-            className="primary"
-          >
+          <button onClick={() => fetchTopo(false)} disabled={loading} className="primary">
             {loading ? 'Syncing...' : '↻ Sync Canvas'}
           </button>
         </div>
@@ -429,7 +394,7 @@ export default function Topology() {
         onWheel={handleWheel}
         style={{
           flex: 1, position: 'relative', overflow: 'hidden',
-          background: 'var(--bg)', cursor: isDragging ? 'grabbing' : 'grab'
+          background: 'var(--bg)', cursor: isDragging ? 'grabbing' : 'grab',
         }}
       >
         {error && !topo && (
@@ -443,39 +408,23 @@ export default function Topology() {
         )}
 
         {error && topo && (
-          <div
-            className="no-pan"
-            style={{
-              position: 'absolute',
-              left: 20,
-              bottom: 20,
-              maxWidth: 420,
-              background: 'var(--surface)',
-              border: '1px solid var(--yellow, #A8750A)',
-              color: 'var(--text)',
-              padding: '10px 12px',
-              fontSize: 11,
-              fontWeight: 600,
-              zIndex: 90,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-            }}
-          >
+          <div className="no-pan" style={{
+            position: 'absolute', left: 20, bottom: 20, maxWidth: 420,
+            background: 'var(--surface)', border: '1px solid var(--yellow, #A8750A)',
+            color: 'var(--text)', padding: '10px 12px', fontSize: 11,
+            fontWeight: 600, zIndex: 90, boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+          }}>
             ⚠ {error}
           </div>
         )}
 
         {topo && (
           <svg
-            width="100%"
-            height="100%"
+            width="100%" height="100%"
             style={{ display: 'block', pointerEvents: 'auto' }}
             onClick={e => {
-              const interactionDuration = Date.now() - clickStartTimestamp.current
-              if (interactionDuration > 200) return
-
-              if ((e.target as SVGElement).tagName === 'svg') {
-                setSelected(null)
-              }
+              if (Date.now() - clickStartTimestamp.current > 200) return
+              if ((e.target as SVGElement).tagName === 'svg') setSelected(null)
             }}
           >
             <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
@@ -484,11 +433,10 @@ export default function Topology() {
                   const src = nodeMap[edge.source]
                   const tgt = nodeMap[edge.target]
                   if (!src || !tgt) return null
-                  const d = edgePath(src, tgt)
                   return (
                     <path
                       key={edge.id}
-                      d={d}
+                      d={edgePath(src, tgt)}
                       stroke="var(--border)"
                       strokeWidth={2}
                       fill="none"
@@ -497,7 +445,6 @@ export default function Topology() {
                   )
                 })}
               </g>
-
               <g>
                 {layout.map(n => (
                   <Node
@@ -505,8 +452,7 @@ export default function Topology() {
                     n={n}
                     selected={selected === n.id}
                     onClick={() => {
-                      const dragDuration = Date.now() - clickStartTimestamp.current
-                      if (dragDuration > 200) return
+                      if (Date.now() - clickStartTimestamp.current > 200) return
                       setSelected(selected === n.id ? null : n.id)
                     }}
                   />
