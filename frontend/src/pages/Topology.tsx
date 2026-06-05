@@ -20,6 +20,14 @@ interface TopologyData {
   edges: TopoEdge[]
 }
 
+let cachedTopology: TopologyData | null = null
+let cachedLastFetch: Date | null = null
+let cachedPan = {x: 0, y: 0}
+let cachedZoom = 0.85
+let cachedSelected: string | null = null
+
+const TOPOLOGY_REFRESH_MS = 10000
+
 const NODE_COLORS: Record<string, string> = {
   orange:          'var(--orange, #CC4E00)',
   blue:            'var(--hpe-green-dk, #007B5E)',
@@ -216,14 +224,14 @@ function DetailPanel({ node, onClose }: { node: LayoutNode; onClose: () => void 
 }
 
 export default function Topology() {
-  const [topo, setTopo] = useState<TopologyData | null>(null)
+  const [topo, setTopo] = useState<TopologyData | null>(() => cachedTopology)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [selected, setSelected] = useState<string | null>(null)
-  const [lastFetch, setLastFetch] = useState<Date | null>(null)
+  const [selected, setSelected] = useState<string | null>(() => cachedSelected)
+  const [lastFetch, setLastFetch] = useState<Date | null>(() => cachedLastFetch)
   
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(0.85)
+  const [pan, setPan] = useState(() => cachedPan)
+  const [zoom, setZoom] = useState(() => cachedZoom)
   const [isDragging, setIsDragging] = useState(false)
   
   const containerRef = useRef<HTMLDivElement>(null)
@@ -234,13 +242,30 @@ export default function Topology() {
     const virtualCanvasSizeX = 1000
     const virtualCanvasSizeY = 1000
     const initialScale = Math.min(width / virtualCanvasSizeX, height / virtualCanvasSizeY) * 0.95
+
+    cachedZoom = initialScale
     setZoom(initialScale)
     
-    setPan({
+    const nextPan = {
       x: (width - virtualCanvasSizeX * initialScale) / 2 + 50,
       y: (height - virtualCanvasSizeY * initialScale) / 2
-    })
+    }
+
+    cachedPan = nextPan
+    setPan(nextPan)
   }, [])
+
+  useEffect(() => {
+    cachedPan = pan
+  }, [pan])
+
+  useEffect(() => {
+    cachedZoom = zoom
+  }, [zoom])
+
+  useEffect(() => {
+    cachedSelected = selected
+  }, [selected])
 
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
@@ -256,37 +281,53 @@ export default function Topology() {
 
   // Fetches data instantly
   const fetchTopo = useCallback(async (isBackgroundSync = false) => {
-    if (!isBackgroundSync) setLoading(true)
-    setError('')
+    const hasCanvasData = cachedTopology !== null
+
+    if (!isBackgroundSync && !hasCanvasData) setLoading(true)
+
     try {
-      // Force cache bypass
       const r = await fetch('/topology.json?t=' + Date.now())
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
+
       const data = await r.json()
-      if (!data || !data.nodes) throw new Error('Data structure parsing error.')
-      
+      if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+        throw new Error('Data structure parsing error.')
+      }
+
+      cachedTopology = data
+      cachedLastFetch = new Date()
+
       setTopo(data)
-      setLastFetch(new Date())
-      
+      setLastFetch(cachedLastFetch)
+
+      setError('')
+
       // Only center if it's the very first load
-      if (!isBackgroundSync && containerRef.current && pan.x === 0) {
+      if (!hasCanvasData && containerRef.current && pan.x === 0 && pan.y === 0) {
         const rect = containerRef.current.getBoundingClientRect()
         initializeCenterPosition(rect.width, rect.height)
       }
     } catch (e: any) {
-      setError(e.message)
-      if (!isBackgroundSync) showToast('Topology: ' + e.message)
+      const message = e?.message ?? 'Failed to refresh topology'
+
+      if (!cachedTopology) {
+        setError(message)
+      } else {
+        setError(`Showing last known topology. Refresh failed: ${message}`)
+      }
+
+      if (!isBackgroundSync) showToast('Topology: ' + message)
     } finally {
       setLoading(false)
     }
   }, [initializeCenterPosition, pan.x])
 
-  // Initial load AND Auto-Polling every 10 seconds
   useEffect(() => {
-    fetchTopo() // Initial immediate fetch
+    fetchTopo(cachedTopology !== null)
+
     const interval = setInterval(() => {
       fetchTopo(true) // Silent background fetch
-    }, 10000)
+    }, TOPOLOGY_REFRESH_MS)
     return () => clearInterval(interval)
   }, [fetchTopo])
 
@@ -352,11 +393,17 @@ export default function Topology() {
         </div>
         
         <div style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 16, display: 'inline-flex', gap: 10 }}>
-          <span>🖱️ Drag to Move</span>
-          <span>📜 Scroll to Zoom</span>
+          <span>Drag to Move</span>
+          <span>Scroll to Zoom</span>
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
+          {error && topo && (
+            <span style={{ fontSize: 11, color: 'var(--yellow, #A8750A)', fontWeight: 700 }}>
+              ⚠ Last refresh failed
+            </span>
+          )}
+
           {lastFetch && (
             <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>
               Live Synced: {lastFetch.toLocaleTimeString()}
@@ -385,7 +432,7 @@ export default function Topology() {
           background: 'var(--bg)', cursor: isDragging ? 'grabbing' : 'grab'
         }}
       >
-        {error && (
+        {error && !topo && (
           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📡</div>
             <div style={{ fontWeight: 700, color: 'var(--text)' }}>{error}</div>
@@ -395,14 +442,36 @@ export default function Topology() {
           </div>
         )}
 
-        {!error && topo && (
+        {error && topo && (
+          <div
+            className="no-pan"
+            style={{
+              position: 'absolute',
+              left: 20,
+              bottom: 20,
+              maxWidth: 420,
+              background: 'var(--surface)',
+              border: '1px solid var(--yellow, #A8750A)',
+              color: 'var(--text)',
+              padding: '10px 12px',
+              fontSize: 11,
+              fontWeight: 600,
+              zIndex: 90,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+            }}
+          >
+            ⚠ {error}
+          </div>
+        )}
+
+        {topo && (
           <svg
             width="100%"
             height="100%"
             style={{ display: 'block', pointerEvents: 'auto' }}
             onClick={e => {
               const interactionDuration = Date.now() - clickStartTimestamp.current
-              if (interactionDuration > 200) return 
+              if (interactionDuration > 200) return
 
               if ((e.target as SVGElement).tagName === 'svg') {
                 setSelected(null)
@@ -437,7 +506,7 @@ export default function Topology() {
                     selected={selected === n.id}
                     onClick={() => {
                       const dragDuration = Date.now() - clickStartTimestamp.current
-                      if (dragDuration > 200) return 
+                      if (dragDuration > 200) return
                       setSelected(selected === n.id ? null : n.id)
                     }}
                   />
