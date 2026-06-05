@@ -2,12 +2,35 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { showToast } from '../components/Toast'
 import { loadCredentialsFromCookie } from './Settings'
 
+// ── module-level cache (survives remounts, not page refresh) ──────────────────
+const cache: {
+  book:      EnrichedBook | null
+  policies:  Policy[]
+  abCooldownUntil:  number   // epoch ms when cooldown expires
+  polCooldownUntil: number
+} = {
+  book:             null,
+  policies:         [],
+  abCooldownUntil:  0,
+  polCooldownUntil: 0,
+}
+
+const COOLDOWN_SECS = 30
+
+function remainingSecs(until: number): number {
+  return Math.max(0, Math.ceil((until - Date.now()) / 1000))
+}
+
 // ── cooldown helper ────────────────────────────────────────────────────────────
+// Stores expiry epoch in the cache so it survives remounts, then ticks down
+// local UI state. The setter/timerRef are purely for display.
 function startCooldown(
+  cacheKey: 'abCooldownUntil' | 'polCooldownUntil',
   setter: React.Dispatch<React.SetStateAction<number>>,
   timerRef: React.MutableRefObject<ReturnType<typeof setInterval> | undefined>,
-  secs = 30
+  secs = COOLDOWN_SECS,
 ) {
+  cache[cacheKey] = Date.now() + secs * 1000
   setter(secs)
   clearInterval(timerRef.current)
   timerRef.current = setInterval(() => {
@@ -60,7 +83,6 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
   )
 }
 
-// Source badge: visually distinguishes automation-owned from manually managed IPs
 function SourceBadge({ source }: { source: 'morpheus' | 'manual' }) {
   return (
     <span style={{
@@ -75,7 +97,6 @@ function SourceBadge({ source }: { source: 'morpheus' | 'manual' }) {
   )
 }
 
-// Inline callout explaining why a Morpheus IP can't be deleted
 function MorpheusGuardNote({ ip }: { ip: string }) {
   return (
     <div style={{
@@ -96,7 +117,6 @@ function MorpheusGuardNote({ ip }: { ip: string }) {
   )
 }
 
-// IP chip — renders differently based on source and quarantine state
 function IpChip({
   entry,
   onQuarantine,
@@ -145,8 +165,6 @@ function IpChip({
         {entry.quarantined && (
           <span style={{ fontSize: 9, fontWeight: 700, color: '#7A2020' }}>BLOCKED</span>
         )}
-
-        {/* Quarantine action for Morpheus IPs */}
         {entry.source === 'morpheus' && !entry.quarantined && (
           <button
             onClick={() => onQuarantine(entry.ip)}
@@ -154,8 +172,6 @@ function IpChip({
             style={{ ...btnBase, color: '#cc8800', fontSize: 13 }}
           >⊘</button>
         )}
-
-        {/* Release from quarantine */}
         {entry.quarantined && (
           <button
             onClick={() => onRelease(entry.ip)}
@@ -163,8 +179,6 @@ function IpChip({
             style={{ ...btnBase, color: 'var(--hpe-green-dk)' }}
           >✓</button>
         )}
-
-        {/* Delete — only for manual IPs, blocked for Morpheus */}
         {entry.source === 'manual' && !entry.quarantined && (
           <button
             onClick={() => onDelete(entry.ip)}
@@ -172,8 +186,6 @@ function IpChip({
             style={{ ...btnBase, color: 'var(--red)' }}
           >×</button>
         )}
-
-        {/* Morpheus IP — show guard explanation on click */}
         {entry.source === 'morpheus' && !entry.quarantined && (
           <button
             onClick={() => setShowGuard(g => !g)}
@@ -190,66 +202,100 @@ function IpChip({
 
 // ── main component ─────────────────────────────────────────────────────────────
 export default function Firewall() {
-  const [cooldownAB, setCooldownAB]   = useState(0)
-  const [cooldownPol, setCooldownPol] = useState(0)
+  // Initialise cooldown display from cached expiry so ticking survives remounts
+  const [cooldownAB,  setCooldownAB]  = useState(() => remainingSecs(cache.abCooldownUntil))
+  const [cooldownPol, setCooldownPol] = useState(() => remainingSecs(cache.polCooldownUntil))
   const abTimer  = useRef<ReturnType<typeof setInterval>>()
   const polTimer = useRef<ReturnType<typeof setInterval>>()
 
-  const [book, setBook]         = useState<EnrichedBook | null>(null)
-  const [policies, setPolicies] = useState<Policy[]>([])
-  const [loadingAB, setLoadingAB]   = useState(false)
+  const [book,       setBook]       = useState<EnrichedBook | null>(() => cache.book)
+  const [policies,   setPolicies]   = useState<Policy[]>(() => cache.policies)
+  const [loadingAB,  setLoadingAB]  = useState(false)
   const [loadingPol, setLoadingPol] = useState(false)
-  const [error, setError] = useState('')
+  const [error,      setError]      = useState('')
 
-  // add manual IP form
   const [addZone, setAddZone] = useState('')
-  const [addIp, setAddIp]     = useState('')
-  const [adding, setAdding]   = useState(false)
+  const [addIp,   setAddIp]   = useState('')
+  const [adding,  setAdding]  = useState(false)
 
-  // confirm-quarantine modal state
   const [quarantineTarget, setQuarantineTarget] = useState<string | null>(null)
-  const [quarantining, setQuarantining] = useState(false)
+  const [quarantining,     setQuarantining]     = useState(false)
 
   const configured = !!loadCredentialsFromCookie()
 
+  // Resume any in-progress cooldown tickers that were running before remount
   useEffect(() => {
+    if (cooldownAB > 0) {
+      clearInterval(abTimer.current)
+      abTimer.current = setInterval(() => {
+        setCooldownAB(prev => {
+          if (prev <= 1) { clearInterval(abTimer.current); return 0 }
+          return prev - 1
+        })
+      }, 1000)
+    }
+    if (cooldownPol > 0) {
+      clearInterval(polTimer.current)
+      polTimer.current = setInterval(() => {
+        setCooldownPol(prev => {
+          if (prev <= 1) { clearInterval(polTimer.current); return 0 }
+          return prev - 1
+        })
+      }, 1000)
+    }
     return () => {
       clearInterval(abTimer.current)
       clearInterval(polTimer.current)
     }
-  }, [])
+  }, []) // run once on mount — intentional
 
-  const fetchBook = useCallback(async () => {
-    if (cooldownAB > 0) return
+  // ── Refs so fetchBook / fetchPolicies don't close over stale cooldown state ─
+  // This breaks the dependency cycle: cooldown no longer forces useCallback to
+  // recreate fetchBook, which no longer restarts the initial-load useEffect.
+  const cooldownABRef  = useRef(cooldownAB)
+  const cooldownPolRef = useRef(cooldownPol)
+  useEffect(() => { cooldownABRef.current  = cooldownAB  }, [cooldownAB])
+  useEffect(() => { cooldownPolRef.current = cooldownPol }, [cooldownPol])
+
+  const fetchBook = useCallback(async (force = false) => {
+    if (!force && cooldownABRef.current > 0) return
     setLoadingAB(true); setError('')
     try {
       const r = await fetch('/api/firewall/address-book/enriched')
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail || r.statusText) }
-      setBook(await r.json())
-      startCooldown(setCooldownAB, abTimer)
+      const data = await r.json()
+      cache.book = data
+      setBook(data)
+      startCooldown('abCooldownUntil', setCooldownAB, abTimer)
     } catch (e: any) {
       setError(e.message)
     } finally {
       setLoadingAB(false)
     }
-  }, [cooldownAB])
+  }, []) // stable — reads cooldown from ref, not state
 
-  const fetchPolicies = useCallback(async () => {
-    if (cooldownPol > 0) return
+  const fetchPolicies = useCallback(async (force = false) => {
+    if (!force && cooldownPolRef.current > 0) return
     setLoadingPol(true)
     try {
       const r = await fetch('/api/firewall/policies')
       if (!r.ok) return
       const d = await r.json()
+      cache.policies = d.policies
       setPolicies(d.policies)
-      startCooldown(setCooldownPol, polTimer)
+      startCooldown('polCooldownUntil', setCooldownPol, polTimer)
     } catch { /* silent */ }
     finally { setLoadingPol(false) }
-  }, [cooldownPol])
+  }, []) // stable — reads cooldown from ref, not state
 
+  // Initial load: skip fetch if we already have cached data AND cooldown is
+  // still active (i.e. a recent fetch happened before remount)
   useEffect(() => {
-    if (configured) { fetchBook(); fetchPolicies() }
+    if (!configured) return
+    if (!cache.book)                       fetchBook()
+    if (cache.policies.length === 0)       fetchPolicies()
   }, [configured, fetchBook, fetchPolicies])
+  // fetchBook / fetchPolicies are now stable so this effect runs exactly once
 
   async function handleAddManualIp() {
     if (!addZone || !addIp) { showToast('Zone and IP are required'); return }
@@ -263,7 +309,7 @@ export default function Firewall() {
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
       showToast(`Added ${addIp} to ${addZone} (manual entry)`)
       setAddIp('')
-      fetchBook()
+      fetchBook(true) // force past cooldown after a mutation
     } catch (e: any) {
       showToast('Error: ' + e.message)
     } finally {
@@ -281,7 +327,7 @@ export default function Firewall() {
       })
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
       showToast(`Deleted manual entry ${ip}`)
-      fetchBook()
+      fetchBook(true)
     } catch (e: any) {
       showToast('Error: ' + e.message)
     }
@@ -299,7 +345,7 @@ export default function Firewall() {
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
       showToast(`⊘ ${quarantineTarget} quarantined — traffic blocked`)
       setQuarantineTarget(null)
-      fetchBook()
+      fetchBook(true)
     } catch (e: any) {
       showToast('Error: ' + e.message)
     } finally {
@@ -317,7 +363,7 @@ export default function Firewall() {
       })
       if (!r.ok) { const d = await r.json(); throw new Error(d.detail) }
       showToast(`✓ ${ip} released from quarantine`)
-      fetchBook()
+      fetchBook(true)
     } catch (e: any) {
       showToast('Error: ' + e.message)
     }
@@ -335,12 +381,8 @@ export default function Firewall() {
     )
   }
 
-  const morpheusCount = book?.address_sets
-    .flatMap(s => s.addresses)
-    .filter(a => a.source === 'morpheus').length ?? 0
-  const manualCount = book?.address_sets
-    .flatMap(s => s.addresses)
-    .filter(a => a.source === 'manual').length ?? 0
+  const morpheusCount   = book?.address_sets.flatMap(s => s.addresses).filter(a => a.source === 'morpheus').length ?? 0
+  const manualCount     = book?.address_sets.flatMap(s => s.addresses).filter(a => a.source === 'manual').length ?? 0
   const quarantineCount = book?.quarantined.length ?? 0
 
   return (
@@ -445,15 +487,15 @@ export default function Firewall() {
           <SectionHeader
             title={`Address Book${book ? ` — ${book.book_name}` : ''}`}
             action={
-              <button onClick={fetchBook} disabled={loadingAB || cooldownAB > 0}>
+              <button onClick={() => fetchBook(true)} disabled={loadingAB || cooldownAB > 0}>
                 {loadingAB ? '…' : cooldownAB > 0 ? `↻ (${cooldownAB}s)` : '↻ Refresh'}
               </button>
             }
           />
 
-          {loadingAB && <div className="loading">● Loading address book…</div>}
+          {loadingAB && !book && <div className="loading">● Loading address book…</div>}
 
-          {book && !loadingAB && (
+          {book && (
             <>
               {book.address_sets.map(set => (
                 <div key={set.name} style={{ marginBottom: 20 }}>
@@ -469,7 +511,6 @@ export default function Firewall() {
                       {set.addresses.filter(a => a.source === 'manual').length} manual)
                     </span>
                   </div>
-
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {set.addresses.map(entry => (
                       <IpChip
@@ -486,11 +527,8 @@ export default function Firewall() {
                   </div>
                 </div>
               ))}
-
               {book.address_sets.length === 0 && (
-                <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                  No address sets found.
-                </div>
+                <div style={{ color: 'var(--muted)', fontSize: 12 }}>No address sets found.</div>
               )}
             </>
           )}
@@ -506,9 +544,7 @@ export default function Firewall() {
             border: '1px solid rgba(100,130,200,.25)',
             borderRadius: 3, padding: '14px 16px', marginBottom: 28,
           }}>
-            <div style={{
-              fontSize: 11, color: '#4a60a0', marginBottom: 12, lineHeight: 1.6,
-            }}>
+            <div style={{ fontSize: 11, color: '#4a60a0', marginBottom: 12, lineHeight: 1.6 }}>
               For IPs <strong>not managed by Morpheus</strong> — physical servers, VPN
               endpoints, static infrastructure. These are stored in{' '}
               <code style={{ fontSize: 10 }}>MANUAL_ENTRIES</code> and will never be
@@ -543,7 +579,7 @@ export default function Firewall() {
             </button>
           </div>
 
-          {/* Morpheus notice — replaces the old Remove IP form */}
+          {/* Morpheus notice */}
           <SectionHeader title="Morpheus-managed IPs" />
           <div style={{
             background: 'var(--hpe-green-lt)',
@@ -566,13 +602,13 @@ export default function Firewall() {
           <SectionHeader
             title="Security Policies"
             action={
-              <button onClick={fetchPolicies} disabled={loadingPol || cooldownPol > 0}>
+              <button onClick={() => fetchPolicies(true)} disabled={loadingPol || cooldownPol > 0}>
                 {loadingPol ? '…' : cooldownPol > 0 ? `↻ (${cooldownPol}s)` : '↻ Refresh'}
               </button>
             }
           />
-          {loadingPol && <div className="loading">● Loading policies…</div>}
-          {!loadingPol && policies.length > 0 && (
+          {loadingPol && policies.length === 0 && <div className="loading">● Loading policies…</div>}
+          {policies.length > 0 && (
             <table style={{
               width: '100%', borderCollapse: 'collapse',
               fontSize: 11, background: 'var(--surface)',
