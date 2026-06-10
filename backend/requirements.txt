@@ -4,3 +4,5 @@ junos-eznc
 ncclient
 paramiko
 python-multipart
+pydantic
+httpx

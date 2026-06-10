@@ -1,10 +1,10 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
-from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import topology, health, firewall, logs
+from fastapi import FastAPI, Depends, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from .routers import health, logs, firewall, ai
 from .services.pyez_client import get_topology
 from .routers.firewall import _creds
 
@@ -20,17 +20,21 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(logs.router)
 app.include_router(firewall.router)
+app.include_router(ai.router)
 
 @app.options("/{rest:path}")
 async def options_handler(rest: str):
-    return Response(status_code=204, headers={
-        "Access-Control-Allow-Origin":  "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    })
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
 
 @app.get("/topology.json")
-def serve_dynamic_topology(creds = Depends(_creds)):
+def serve_dynamic_topology(creds=Depends(_creds)):
     try:
         topology_data = get_topology(creds)
         return topology_data

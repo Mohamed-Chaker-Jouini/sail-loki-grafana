@@ -7,6 +7,7 @@ services:
       - "8880:8880"
     environment:
       - LOKI_URL=http://sail-loki:3100
+      - AI_SERVICE_URL=http://10.202.135.232:8000
       - NO_PROXY=localhost,127.0.0.1,sail-loki,10.202.52.0/24
       - no_proxy=localhost,127.0.0.1,sail-loki,10.202.52.0/24
     restart: unless-stopped
