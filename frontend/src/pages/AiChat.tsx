@@ -27,28 +27,57 @@ type AiChatResponse = {
   error?: string
 }
 
-const STORAGE_KEY = 'sail.aichat.history.v1'
+type ChatSession = {
+  conversationId: string
+  messages: ChatMessage[]
+}
+
+const STORAGE_KEY = 'sail.aichat.session.v1'
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function safeLoadHistory(): ChatMessage[] {
+function initialAssistantMessage(): ChatMessage {
+  return {
+    id: uid(),
+    role: 'assistant',
+    content:
+      'Hi — I can help explain drift events, summarize logs, and draft incident reports. Ask me about what changed, why it changed, or how to fix it.',
+    createdAt: Date.now(),
+  }
+}
+
+function safeLoadSession(): ChatSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
+    if (!raw) return null
+
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((m) => m && typeof m.content === 'string' && (m.role === 'user' || m.role === 'assistant' || m.role === 'system'))
-      .map((m) => ({
+    if (!parsed || typeof parsed !== 'object') return null
+    if (typeof parsed.conversationId !== 'string') return null
+    if (!Array.isArray(parsed.messages)) return null
+
+    const messages = parsed.messages
+      .filter(
+        (m: any) =>
+          m &&
+          typeof m.content === 'string' &&
+          (m.role === 'user' || m.role === 'assistant' || m.role === 'system')
+      )
+      .map((m: any) => ({
         id: String(m.id ?? uid()),
         role: m.role,
         content: String(m.content),
         createdAt: Number(m.createdAt ?? Date.now()),
       }))
+
+    return {
+      conversationId: parsed.conversationId,
+      messages: messages.length ? messages : [initialAssistantMessage()],
+    }
   } catch {
-    return []
+    return null
   }
 }
 
@@ -58,20 +87,15 @@ export default function AiChat() {
     []
   )
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = safeLoadHistory()
-    return saved.length
-      ? saved
-      : [
-          {
-            id: uid(),
-            role: 'assistant',
-            content:
-              'Hi — I can help explain drift events, summarize logs, and draft incident reports. Ask me about what changed, why it changed, or how to fix it.',
-            createdAt: Date.now(),
-          },
-        ]
-  })
+  const loadedSession = useMemo(() => safeLoadSession(), [])
+
+  const [conversationId, setConversationId] = useState<string>(
+    () => loadedSession?.conversationId || uid()
+  )
+
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => loadedSession?.messages || [initialAssistantMessage()]
+  )
 
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -80,11 +104,17 @@ export default function AiChat() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          conversationId,
+          messages,
+        } satisfies ChatSession)
+      )
     } catch {
       // ignore storage failures
     }
-  }, [messages])
+  }, [conversationId, messages])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
@@ -116,7 +146,7 @@ export default function AiChat() {
           Accept: 'application/json',
         },
         body: JSON.stringify({
-          conversation_id: getConversationId(nextMessages),
+          conversation_id: conversationId,
           messages: nextMessages.map((m) => ({
             role: m.role,
             content: m.content,
@@ -184,17 +214,19 @@ export default function AiChat() {
     }
   }
 
-  function clearChat() {
-    setMessages([
-      {
-        id: uid(),
-        role: 'assistant',
-        content:
-          'Hi — I can help explain drift events, summarize logs, and draft incident reports. Ask me about what changed, why it changed, or how to fix it.',
-        createdAt: Date.now(),
-      },
-    ])
+  function newChat() {
+    const nextConversationId = uid()
+    setConversationId(nextConversationId)
+    setMessages([initialAssistantMessage()])
+    setInput('')
     setError(null)
+    setSending(false)
+
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // ignore storage failures
+    }
   }
 
   const canSend = input.trim().length > 0 && !sending
@@ -203,14 +235,12 @@ export default function AiChat() {
     <div
       style={{
         height: 'calc(100vh - 115px)',
-        display: 'grid',
-        gridTemplateColumns: '1.5fr .7fr',
-        gap: 16,
         padding: 16,
       }}
     >
       <section
         style={{
+          height: '100%',
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
@@ -229,6 +259,7 @@ export default function AiChat() {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 12,
+            flexWrap: 'wrap',
           }}
         >
           <div>
@@ -238,15 +269,15 @@ export default function AiChat() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span
               className="badge b-clean"
               style={{ textTransform: 'none', letterSpacing: 0, fontSize: 11 }}
             >
               {sending ? 'Thinking' : 'Ready'}
             </span>
-            <button type="button" onClick={clearChat}>
-              Clear
+            <button type="button" onClick={newChat}>
+              New chat
             </button>
           </div>
         </div>
@@ -341,45 +372,8 @@ export default function AiChat() {
           </div>
         </div>
       </section>
-
-      <aside
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          minHeight: 0,
-        }}
-      >
-        <Card title="What this endpoint should do">
-          <p style={helpText}>
-            Send the full message history, optional incident context, and request flags. The AI
-            service should return a single assistant message for now, with streaming added later if
-            you want token-by-token output.
-          </p>
-        </Card>
-
-        <Card title="Suggested behavior">
-          <p style={helpText}>
-            Best results come from a model that can: inspect drift logs, compare before/after
-            config, identify likely root cause, and produce a concise action plan.
-          </p>
-        </Card>
-
-        <Card title="Frontend config">
-          <p style={helpText}>
-            The component uses <code>/api/ai/chat</code> by default. Override it with
-            <code>VITE_AI_CHAT_URL</code> when the backend lives elsewhere.
-          </p>
-        </Card>
-      </aside>
     </div>
   )
-}
-
-function getConversationId(messages: ChatMessage[]) {
-  const first = messages[0]
-  if (!first) return uid()
-  return `sail-${first.createdAt}`
 }
 
 function MessageBubble({ message }: { message: ChatMessage }) {
@@ -425,28 +419,4 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       </div>
     </div>
   )
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        padding: 14,
-      }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
-        {title}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-const helpText: React.CSSProperties = {
-  fontSize: 12,
-  color: 'var(--text-2)',
-  lineHeight: 1.7,
 }
