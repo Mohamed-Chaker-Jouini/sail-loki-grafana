@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { showToast } from '../components/Toast'
 import { loadCredentialsFromCookie } from './Settings'
+import VMPolicyBuilder from '../components/VMPolicyBuilder'
+
 
 // ── module-level cache (survives remounts, not page refresh) ──────────────────
 const cache: {
@@ -647,6 +649,7 @@ export default function Firewall() {
           )}
         </div>
       </div>
+      <VMPolicyBuilder />
     </div>
   )
 }

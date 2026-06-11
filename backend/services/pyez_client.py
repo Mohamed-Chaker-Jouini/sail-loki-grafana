@@ -420,3 +420,129 @@ def _apply_commands(creds: SRXCredentials, commands: list[str]) -> None:
                 cu.load(cmd, format="set")
             cu.pdiff()
             cu.commit(comment="SAIL control panel", timeout=30)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SAIL-managed policy rules
+# Convention: all policies and application objects created here are prefixed
+# SAIL_ so they're distinguishable from Ansible-managed rules.
+# Ansible only manages zone address-sets — it never touches policies — so
+# SAIL_ policies survive reconciliation runs without conflict.
+# ══════════════════════════════════════════════════════════════════════════════
+
+SAIL_POLICY_PREFIX = "SAIL_"
+SAIL_APP_PREFIX    = "SAIL_APP_"
+
+# Junos built-in application objects so we don't create redundant custom objects
+_JUNOS_BUILTIN: dict[tuple[int, str], str] = {
+    (20,   "tcp"): "junos-ftp",
+    (21,   "tcp"): "junos-ftp",
+    (22,   "tcp"): "junos-ssh",
+    (23,   "tcp"): "junos-telnet",
+    (25,   "tcp"): "junos-smtp",
+    (53,   "udp"): "junos-dns-udp",
+    (53,   "tcp"): "junos-dns-tcp",
+    (80,   "tcp"): "junos-http",
+    (110,  "tcp"): "junos-pop3",
+    (143,  "tcp"): "junos-imap",
+    (443,  "tcp"): "junos-https",
+    (3306, "tcp"): "junos-mysql",
+    (3389, "tcp"): "junos-rdp",
+}
+
+
+def get_sail_policies(creds: SRXCredentials) -> list[dict]:
+    """Returns only SAIL_-prefixed policies — UI-owned, Ansible never creates these."""
+    return [p for p in get_policies(creds) if p["name"].startswith(SAIL_POLICY_PREFIX)]
+
+
+def create_policy_rule(creds: SRXCredentials, rule: dict) -> None:
+    """
+    Creates an SRX security policy from a rule dict:
+
+        {
+          "name": "WEB_TO_DB_MYSQL",           # will become SAIL_WEB_TO_DB_MYSQL
+          "from_zone": "WEB",
+          "to_zone": "DB",
+          "source_addresses": ["any"],          # or ["10.0.0.1"]
+          "destination_addresses": ["10.0.1.5"],
+          "ports": [
+              {"protocol": "tcp", "port": 3306},
+              {"protocol": "tcp", "port": 443},
+              {"protocol": "any", "port": null}, # matches any port
+          ],
+          "action": "permit"                    # or "deny"
+        }
+
+    For well-known ports Junos built-in app objects are used (junos-ssh, etc.).
+    Custom ports get a SAIL_APP_TCP_<port> object created automatically.
+    Empty ports list → application "any".
+    """
+    commands: list[str] = []
+    app_names: list[str] = []
+
+    ports = rule.get("ports") or []
+    if not ports:
+        app_names = ["any"]
+    else:
+        for ps in ports:
+            proto = (ps.get("protocol") or "tcp").lower()
+            port  = ps.get("port")
+
+            if proto == "any" or port is None:
+                if "any" not in app_names:
+                    app_names.append("any")
+                continue
+
+            port_int = int(port)
+            builtin  = _JUNOS_BUILTIN.get((port_int, proto))
+            if builtin:
+                if builtin not in app_names:
+                    app_names.append(builtin)
+            else:
+                obj = f"{SAIL_APP_PREFIX}{proto.upper()}_{port_int}"
+                # Idempotent — SRX silently ignores re-creating an existing app
+                commands.append(
+                    f"set applications application {obj} "
+                    f"protocol {proto} destination-port {port_int}"
+                )
+                if obj not in app_names:
+                    app_names.append(obj)
+
+    policy_name = f"{SAIL_POLICY_PREFIX}{rule['name']}"
+    fz, tz = rule["from_zone"], rule["to_zone"]
+    match_base = (
+        f"set security policies from-zone {fz} to-zone {tz} "
+        f"policy {policy_name} match"
+    )
+
+    for src in rule.get("source_addresses") or ["any"]:
+        commands.append(f"{match_base} source-address {src}")
+    for dst in rule.get("destination_addresses") or ["any"]:
+        commands.append(f"{match_base} destination-address {dst}")
+    for app in app_names:
+        commands.append(f"{match_base} application {app}")
+
+    action = rule.get("action", "permit")
+    commands.append(
+        f"set security policies from-zone {fz} to-zone {tz} "
+        f"policy {policy_name} then {action}"
+    )
+
+    _apply_commands(creds, commands)
+
+
+def delete_policy_rule(creds: SRXCredentials, from_zone: str, to_zone: str, name: str) -> None:
+    """
+    Deletes a SAIL-managed policy. Accepts the name with or without the SAIL_ prefix.
+    Does NOT remove application objects — they're harmless if unused and may be
+    shared across rules. Remove manually from the SRX if you need to clean them up.
+    """
+    policy_name = (
+        name if name.startswith(SAIL_POLICY_PREFIX)
+        else f"{SAIL_POLICY_PREFIX}{name}"
+    )
+    _apply_commands(creds, [
+        f"delete security policies from-zone {from_zone} to-zone {to_zone} "
+        f"policy {policy_name}"
+    ])

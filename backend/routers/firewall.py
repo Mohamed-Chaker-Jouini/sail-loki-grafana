@@ -213,3 +213,77 @@ def delete_address_legacy(payload: ManualDeletePayload):
             "POST /api/firewall/manual/delete-address for manual entries."
         ),
     )
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SAIL-managed connectivity rules
+# These endpoints are the operational layer: engineers use them to define
+# per-VM port/zone access without touching the CLI. All policies created
+# here are prefixed SAIL_ and are never managed by Ansible.
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PortSpec(BaseModel):
+    protocol: str = "tcp"   # tcp | udp | any
+    port: int | None = None  # None = any port
+
+class PolicyRulePayload(BaseModel):
+    name: str
+    from_zone: str
+    to_zone: str
+    source_addresses:      list[str] = ["any"]
+    destination_addresses: list[str] = ["any"]
+    ports:  list[PortSpec] = []
+    action: str = "permit"   # permit | deny
+
+class DeletePolicyPayload(BaseModel):
+    from_zone: str
+    to_zone:   str
+    name:      str
+
+
+@router.get("/sail-policies")
+def get_sail_policies():
+    """
+    Returns all SAIL_-prefixed security policies — those created through
+    this UI. Ansible-managed policies are excluded.
+    """
+    try:
+        return {"policies": srx.get_sail_policies(_creds())}
+    except Exception as e:
+        _srx_error(e)
+
+
+@router.post("/sail-policies", status_code=204)
+def create_policy_rule(payload: PolicyRulePayload):
+    """
+    Creates a named SRX security policy for a specific zone-to-zone flow
+    with port-level control. The policy is prefixed SAIL_ and is never
+    touched by Ansible.
+
+    Port resolution:
+      - Well-known ports (22/SSH, 80/HTTP, 443/HTTPS, 3306/MySQL, etc.)
+        map to Junos built-in application objects.
+      - Custom ports get a SAIL_APP_TCP_<port> application object created
+        automatically.
+      - Empty ports list → application "any".
+
+    Address resolution:
+      - "any" is passed through as-is.
+      - Specific IPs must exist in an address book on the SRX (MORPHEUS_MANAGED
+        or MANUAL_ENTRIES) — the SRX will reject the commit otherwise.
+    """
+    try:
+        srx.create_policy_rule(_creds(), payload.model_dump())
+    except Exception as e:
+        _srx_error(e)
+
+
+@router.post("/sail-policies/delete", status_code=204)
+def delete_policy_rule(payload: DeletePolicyPayload):
+    """
+    Deletes a SAIL-managed policy by name and zone context.
+    Does not remove associated application objects (harmless if unused).
+    """
+    try:
+        srx.delete_policy_rule(_creds(), payload.from_zone, payload.to_zone, payload.name)
+    except Exception as e:
+        _srx_error(e)
