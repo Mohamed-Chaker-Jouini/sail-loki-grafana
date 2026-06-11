@@ -10,7 +10,6 @@ from ..services.ai_context import build_ai_context
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
-
 Role = Literal["system", "user", "assistant"]
 
 
@@ -43,25 +42,28 @@ async def chat(req: ChatRequest, creds=Depends(_creds)):
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages is required")
 
-    conversation_id = req.conversation_id or f"sail-{int(datetime.now(timezone.utc).timestamp())}"
+    conversation_id = (
+        req.conversation_id
+        or f"sail-{int(datetime.now(timezone.utc).timestamp())}"
+    )
 
+    # build_ai_context fetches live Loki + SRX data unconditionally
     sail_context = build_ai_context(
         creds=creds,
-        extra_context=req.context,
+        extra_context=req.context,   # page, incident_id, etc. from frontend
     )
 
     payload = {
         "conversation_id": conversation_id,
-        "messages": [m.model_dump() for m in req.messages],
-        "stream": req.stream,
-        "temperature": req.temperature,
+        "messages":        [m.model_dump() for m in req.messages],
+        "stream":          req.stream,
+        "temperature":     req.temperature,
         "max_output_tokens": req.max_output_tokens,
-        "top_p": req.top_p,
-        "context": sail_context,
+        "top_p":           req.top_p,
+        "context":         sail_context,
     }
 
     try:
-        result = await chat_with_ai(payload)
-        return result
+        return await chat_with_ai(payload)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI service error: {str(e)}")
