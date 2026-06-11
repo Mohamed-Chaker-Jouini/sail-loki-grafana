@@ -66,21 +66,31 @@ export default function VMPolicyBuilder() {
   // ── data fetching ─────────────────────────────────────────────────────────────
   const fetchBook = useCallback(async () => {
     try {
-      const r = await fetch('/api/firewall/address-book/enriched')
-      if (!r.ok) return
-      const data = await r.json()
-      const zSet = new Set<string>()
-      const ips: IpOption[] = []
-      for (const aset of data.address_sets ?? []) {
-        const z = (aset.name as string).replace('SET_', '')
-        zSet.add(z)
-        for (const addr of aset.addresses ?? [])
-          ips.push({ ip: addr.ip, zone: z, source: addr.source })
+      // Fetch real security zone names and address book IPs in parallel.
+      // Zones come from `security zones security-zone` — NOT from address book
+      // set names (SET_WEB etc.), which are a separate config tree on the SRX.
+      const [zoneRes, bookRes] = await Promise.all([
+        fetch('/api/firewall/zones'),
+        fetch('/api/firewall/address-book/enriched'),
+      ])
+      if (zoneRes.ok) {
+        const { zones: zArr } = await zoneRes.json()
+        setZones(zArr ?? [])
+        if (zArr?.length) {
+          setFromZone(z => z || zArr[0])
+          setToZone(z => z || zArr[0])
+        }
       }
-      const zArr = Array.from(zSet)
-      setZones(zArr)
-      setAllIps(ips)
-      if (zArr.length) { setFromZone(z => z || zArr[0]); setToZone(z => z || zArr[0]) }
+      if (bookRes.ok) {
+        const data = await bookRes.json()
+        const ips: IpOption[] = []
+        for (const aset of data.address_sets ?? []) {
+          const z = (aset.name as string).replace('SET_', '')
+          for (const addr of aset.addresses ?? [])
+            ips.push({ ip: addr.ip, zone: z, source: addr.source })
+        }
+        setAllIps(ips)
+      }
     } catch { /* silent */ }
   }, [])
 
@@ -111,9 +121,13 @@ export default function VMPolicyBuilder() {
       : [...p, { id: ++_pid, protocol: proto as PortEntry['protocol'], port: String(port) }]
     )
 
-  // ── derived: IPs filtered by chosen zone ─────────────────────────────────────
-  const srcIps = allIps.filter(a => a.zone === fromZone)
-  const dstIps = allIps.filter(a => a.zone === toZone)
+  // ── derived: IPs grouped by address-book set for <optgroup> display ──────────
+  // NOT filtered by zone — address book entries are independent of zone names
+  // on SRX; filtering by zone would break whenever naming conventions differ.
+  const ipsBySet = allIps.reduce<Record<string, IpOption[]>>((acc, a) => {
+    ;(acc[a.zone] ??= []).push(a)
+    return acc
+  }, {})
 
   // ── submit ────────────────────────────────────────────────────────────────────
   async function handleSubmit() {
@@ -265,8 +279,12 @@ export default function VMPolicyBuilder() {
               {srcType === 'specific' && (
                 <select value={srcIp} onChange={e => setSrcIp(e.target.value)} style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}>
                   <option value="">— select source IP —</option>
-                  {srcIps.map(a => (
-                    <option key={a.ip} value={a.ip}>{a.ip} ({a.source})</option>
+                  {Object.entries(ipsBySet).map(([set, ips]) => (
+                    <optgroup key={set} label={`SET_${set}`}>
+                      {ips.map(a => (
+                        <option key={a.ip} value={a.ip}>{a.ip} ({a.source})</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               )}
@@ -282,8 +300,12 @@ export default function VMPolicyBuilder() {
               {dstType === 'specific' && (
                 <select value={dstIp} onChange={e => setDstIp(e.target.value)} style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}>
                   <option value="">— select destination IP —</option>
-                  {dstIps.map(a => (
-                    <option key={a.ip} value={a.ip}>{a.ip} ({a.source})</option>
+                  {Object.entries(ipsBySet).map(([set, ips]) => (
+                    <optgroup key={set} label={`SET_${set}`}>
+                      {ips.map(a => (
+                        <option key={a.ip} value={a.ip}>{a.ip} ({a.source})</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               )}

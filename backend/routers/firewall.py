@@ -225,6 +225,19 @@ class PortSpec(BaseModel):
     protocol: str = "tcp"   # tcp | udp | any
     port: int | None = None  # None = any port
 
+@router.get("/zones")
+def get_security_zones():
+    """
+    Returns the actual security zone names configured on the SRX
+    (under security zones security-zone). These are the valid names
+    for policy from-zone / to-zone — distinct from address book set names.
+    """
+    try:
+        return {"zones": srx.get_security_zones(_creds())}
+    except Exception as e:
+        _srx_error(e)
+
+
 class PolicyRulePayload(BaseModel):
     name: str
     from_zone: str

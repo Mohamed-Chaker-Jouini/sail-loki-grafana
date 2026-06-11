@@ -430,6 +430,31 @@ def _apply_commands(creds: SRXCredentials, commands: list[str]) -> None:
 # SAIL_ policies survive reconciliation runs without conflict.
 # ══════════════════════════════════════════════════════════════════════════════
 
+def get_security_zones(creds: SRXCredentials) -> list[str]:
+    """
+    Returns the names of all configured security zones from
+    `security zones security-zone`. These are the valid zone names
+    for policy from-zone / to-zone — NOT the address book set names
+    (SET_WEB etc.), which are a separate config tree.
+    """
+    filter_xml = """
+    <configuration>
+      <security>
+        <zones/>
+      </security>
+    </configuration>
+    """
+    with _connected_dev(creds) as dev:
+        config = dev.rpc.get_config(filter_xml=etree.fromstring(filter_xml))
+
+    zones = []
+    for zone in config.iter("security-zone"):
+        name_el = zone.find("name")
+        if name_el is not None and name_el.text:
+            zones.append(name_el.text.strip())
+    return zones
+
+
 SAIL_POLICY_PREFIX = "SAIL_"
 SAIL_APP_PREFIX    = "SAIL_APP_"
 
