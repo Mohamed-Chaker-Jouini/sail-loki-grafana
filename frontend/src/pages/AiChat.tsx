@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 type Role = 'user' | 'assistant' | 'system'
 
@@ -80,6 +82,8 @@ function safeLoadSession(): ChatSession | null {
     return null
   }
 }
+
+
 
 export default function AiChat() {
   const endpoint = useMemo(
@@ -289,7 +293,7 @@ export default function AiChat() {
             minHeight: 0,
             overflowY: 'auto',
             padding: 16,
-            background: 'linear-gradient(180deg, rgba(230,247,243,.35), transparent 120px)',
+            background: 'linear-gradient(180deg, rgba(230,247,243,.35), transparent 80px)',
           }}
         >
           {messages.map((m) => (
@@ -346,7 +350,7 @@ export default function AiChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder="Ask about a drift event, a firewall change, or request a report..."
-              rows={4}
+              rows={3}
               style={{
                 flex: 1,
                 resize: 'none',
@@ -390,17 +394,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     >
       <div
         style={{
-          maxWidth: '80%',
-          padding: '10px 12px',
+          maxWidth: '85%',
+          padding: '10px 14px',
           borderRadius: 10,
           border: '1px solid',
           borderColor: isUser ? 'var(--hpe-green-mid)' : 'var(--border)',
           background: isUser ? 'var(--hpe-green-lt)' : 'var(--surface)',
           color: 'var(--text)',
           boxShadow: isAssistant ? '0 1px 0 rgba(0,0,0,.02)' : 'none',
-          whiteSpace: 'pre-wrap',
-          lineHeight: 1.6,
           fontSize: 13,
+          lineHeight: 1.6,
         }}
       >
         <div
@@ -415,7 +418,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         >
           {isUser ? 'You' : 'AI'}
         </div>
-        {message.content}
+
+        {isUser ? (
+          <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+        ) : (
+          <div className="ai-markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   )
