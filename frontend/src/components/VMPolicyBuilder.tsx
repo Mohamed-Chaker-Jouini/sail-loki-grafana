@@ -253,21 +253,37 @@ export default function VMPolicyBuilder() {
             </div>
 
             {/* Zone row */}
+            <datalist id="zone-list">
+              {zones.map(z => <option key={z} value={z} />)}
+            </datalist>
             <div style={row}>
               <div style={col(1)}>
                 <FieldLabel>From Zone</FieldLabel>
-                <select value={fromZone} onChange={e => { setFromZone(e.target.value); setSrcIp('') }} style={{ width: '100%', fontSize: 11 }}>
-                  {zones.map(z => <option key={z} value={z}>{z}</option>)}
-                </select>
+                <input
+                  list="zone-list"
+                  value={fromZone}
+                  onChange={e => { setFromZone(e.target.value); setSrcIp('') }}
+                  placeholder={zones.length ? zones[0] : 'e.g. trust'}
+                  style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}
+                />
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 6, color: 'var(--muted)', fontSize: 13 }}>→</div>
               <div style={col(1)}>
                 <FieldLabel>To Zone</FieldLabel>
-                <select value={toZone} onChange={e => { setToZone(e.target.value); setDstIp('') }} style={{ width: '100%', fontSize: 11 }}>
-                  {zones.map(z => <option key={z} value={z}>{z}</option>)}
-                </select>
+                <input
+                  list="zone-list"
+                  value={toZone}
+                  onChange={e => { setToZone(e.target.value); setDstIp('') }}
+                  placeholder={zones.length ? zones[0] : 'e.g. untrust'}
+                  style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}
+                />
               </div>
             </div>
+            {zones.length === 0 && (
+              <div style={{ fontSize: 10, color: '#cc8800', marginTop: -8, marginBottom: 8 }}>
+                ⚠ Could not load zone names — type the zone name exactly as configured on the SRX
+              </div>
+            )}
 
             {/* Source address */}
             <div style={{ marginBottom: 12 }}>
