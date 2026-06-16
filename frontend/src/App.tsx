@@ -6,6 +6,7 @@ import Logs from './pages/Logs'
 import AiChat from './pages/AiChat'
 import Settings from './pages/Settings'
 import Toast from './components/Toast'
+import Login from './pages/Login' // Adjust path if needed
 
 export type Tab = 'firewall' | 'topology' | 'logs' | 'ai' | 'settings'
 
@@ -18,10 +19,18 @@ const TABS: { id: Tab; label: string }[] = [
 ]
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [tab, setTab] = useState<Tab>('firewall')
 
+  // Render Login screen if not authenticated
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />
+  }
+
+  // Render main app once authenticated
   return (
     <>
+      {/* If you want a logout button in your header, you could pass setIsLoggedIn(false) down as a prop */}
       <Header activeTab={tab} tabs={TABS} onTabChange={setTab} />
       <main>
         {tab === 'firewall' && <Firewall />}
