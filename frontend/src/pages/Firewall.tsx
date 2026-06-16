@@ -48,6 +48,7 @@ interface EnrichedAddress {
   ip: string
   source: 'morpheus' | 'manual'
   quarantined: boolean
+  zone?: string
 }
 interface EnrichedSet {
   name: string
@@ -63,6 +64,9 @@ interface Policy {
   to_zone: string
   name: string
   action: string
+  source_addresses?: string[]
+  destination_addresses?: string[]
+  ports?: string[]
 }
 
 // ── sub-components ─────────────────────────────────────────────────────────────
@@ -162,7 +166,7 @@ function IpChip({
 
   return (
     <div style={{ display: 'inline-block' }}>
-      <span style={chipStyle}>
+      <span style={chipStyle} title={`Zone: ${entry.zone || 'unknown'}`}>
         {entry.ip}
         {entry.quarantined && (
           <span style={{ fontSize: 9, fontWeight: 700, color: '#7A2020' }}>BLOCKED</span>
@@ -618,7 +622,7 @@ export default function Firewall() {
             }}>
               <thead>
                 <tr style={{ background: 'var(--hpe-green)' }}>
-                  {['From Zone', 'To Zone', 'Policy Name', 'Action'].map(h => (
+                  {['Policy Name', 'Source', 'Destination', 'Ports', 'Zones', 'Action'].map(h => (
                     <th key={h} style={{
                       textAlign: 'left', padding: '8px 10px',
                       fontSize: 10, fontWeight: 700,
@@ -631,9 +635,19 @@ export default function Firewall() {
               <tbody>
                 {policies.map((p, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border-lt)' }}>
-                    <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{p.from_zone}</td>
-                    <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{p.to_zone}</td>
                     <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 10 }}>{p.name}</td>
+                    <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>
+                      {p.source_addresses?.length ? p.source_addresses.join(', ') : 'any'}
+                    </td>
+                    <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>
+                      {p.destination_addresses?.length ? p.destination_addresses.join(', ') : 'any'}
+                    </td>
+                    <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>
+                      {p.ports?.length ? p.ports.join(', ') : 'all'}
+                    </td>
+                    <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 10, opacity: .7 }}>
+                      {p.from_zone} → {p.to_zone}
+                    </td>
                     <td style={{ padding: '7px 10px' }}>
                       <span className={`badge ${p.action === 'permit' ? 'b-permit' : 'b-deny'}`}>
                         {p.action}

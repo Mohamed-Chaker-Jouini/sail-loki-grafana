@@ -4,7 +4,7 @@ from jnpr.junos import Device
 from jnpr.junos.utils.config import Config
 from jnpr.junos.exception import ConnectError, RpcError
 from lxml import etree
-from typing import Any
+import ipaddress
 from .credentials import SRXCredentials
 
 # ── Book name constants ────────────────────────────────────────────────────────
@@ -15,7 +15,105 @@ from .credentials import SRXCredentials
 MORPHEUS_BOOK  = "MORPHEUS_MANAGED"
 MANUAL_BOOK    = "MANUAL_ENTRIES"
 QUARANTINE_SET = "SET_QUARANTINE"
+# ── real zone resolution (ground truth, not naming convention) ───────────────
+# Figures out which security zone an IP actually lives in by combining
+# `security zones security-zone <name> { interfaces { ... } }` with the
+# subnet configured on each of those interfaces. This replaces guessing a
+# zone from an address-set name (e.g. "SET_WEB" -> "WEB_ZONE"), which only
+# works if that exact convention is followed on the box. Works for both
+# Morpheus-managed and manual IPs since both sit in the same subnets either way.
 
+def _zone_interfaces(creds: SRXCredentials) -> dict[str, list[str]]:
+    filter_xml = """
+    <configuration>
+      <security>
+        <zones/>
+      </security>
+    </configuration>
+    """
+    with _connected_dev(creds) as dev:
+        config = dev.rpc.get_config(filter_xml=etree.fromstring(filter_xml))
+
+    result: dict[str, list[str]] = {}
+    for zone in config.iter("security-zone"):
+        name_el = zone.find("name")
+        if name_el is None or not name_el.text:
+            continue
+        zname = name_el.text.strip()
+        ifaces = []
+        iface_block = zone.find("interfaces")
+        if iface_block is not None:
+            for iface in iface_block.findall("name"):
+                if iface.text:
+                    ifaces.append(iface.text.strip())
+        result[zname] = ifaces
+    return result
+
+
+def _interface_subnets(creds: SRXCredentials) -> dict[str, str]:
+    filter_xml = """
+    <configuration>
+      <interfaces/>
+    </configuration>
+    """
+    with _connected_dev(creds) as dev:
+        config = dev.rpc.get_config(filter_xml=etree.fromstring(filter_xml))
+
+    result: dict[str, str] = {}
+    for iface in config.iter("interface"):
+        ifname_el = iface.find("name")
+        if ifname_el is None or not ifname_el.text:
+            continue
+        ifname = ifname_el.text.strip()
+        for unit in iface.findall("unit"):
+            unum_el = unit.find("name")
+            unum = unum_el.text.strip() if unum_el is not None and unum_el.text else "0"
+            family = unit.find("family")
+            inet = family.find("inet") if family is not None else None
+            if inet is None:
+                continue
+            for addr in inet.findall("address"):
+                name_el = addr.find("name")
+                if name_el is not None and name_el.text:
+                    result[f"{ifname}.{unum}"] = name_el.text.strip()
+    return result
+
+
+def build_ip_zone_resolver(creds: SRXCredentials):
+    """
+    Returns a function resolve(ip) -> zone_name based on real interface/subnet
+    config — not a naming guess. Returns "" if nothing configured matches.
+    """
+    zone_ifaces  = _zone_interfaces(creds)
+    iface_subnet = _interface_subnets(creds)
+
+    iface_to_zone: dict[str, str] = {}
+    for zname, ifaces in zone_ifaces.items():
+        for ifc in ifaces:
+            iface_to_zone[ifc] = zname
+
+    nets: list[tuple[ipaddress.IPv4Network, str]] = []
+    for ifc, cidr in iface_subnet.items():
+        zname = iface_to_zone.get(ifc)
+        if not zname:
+            continue
+        try:
+            nets.append((ipaddress.ip_network(cidr, strict=False), zname))
+        except ValueError:
+            continue
+    nets.sort(key=lambda t: t[0].prefixlen, reverse=True)  # most specific subnet wins
+
+    def resolve(ip: str) -> str:
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return ""
+        for net, zname in nets:
+            if addr in net:
+                return zname
+        return ""
+
+    return resolve
 
 def get_topology(creds: SRXCredentials) -> dict:
     """Queries the vSRX and builds a real-time React Flow topology map."""
@@ -138,6 +236,11 @@ def _xml_text(element, path: str) -> str:
     el = element.find(path)
     return el.text.strip() if el is not None and el.text else ""
 
+def _xml_list(element, tag: str) -> list[str]:
+    if element is None:
+        return []
+    return [el.text.strip() for el in element.findall(tag) if el.text]
+
 
 # ── address book ───────────────────────────────────────────────────────────────
 
@@ -195,31 +298,11 @@ def get_address_book(creds: SRXCredentials, book_name: str = MORPHEUS_BOOK) -> d
 
 
 def get_enriched_address_book(creds: SRXCredentials) -> dict:
-    """
-    Returns MORPHEUS_MANAGED merged with MANUAL_ENTRIES, each IP tagged with
-    its source so the frontend can render them differently.
-
-    Shape:
-    {
-      "book_name": "MORPHEUS_MANAGED",
-      "quarantined": ["10.0.0.5", ...],
-      "address_sets": [
-        {
-          "name": "SET_WEB",
-          "addresses": [
-            {"ip": "10.0.0.1", "source": "morpheus", "quarantined": false},
-            {"ip": "10.0.0.9", "source": "manual",   "quarantined": false},
-          ]
-        },
-        ...
-      ]
-    }
-    """
     morpheus_book = get_address_book(creds, MORPHEUS_BOOK)
     manual_book   = get_address_book(creds, MANUAL_BOOK)
     quarantined   = set(get_quarantined_ips(creds))
+    resolve_zone  = build_ip_zone_resolver(creds)          # ← new line
 
-    # Index manual IPs by zone set name for fast lookup
     manual_by_set: dict[str, set[str]] = {}
     for aset in manual_book.get("address_sets", []):
         manual_by_set[aset["name"]] = set(aset["addresses"])
@@ -229,7 +312,6 @@ def get_enriched_address_book(creds: SRXCredentials) -> dict:
         if aset["name"] == QUARANTINE_SET:
             continue
         manual_ips = manual_by_set.get(aset["name"], set())
-        # Combine: morpheus IPs + any manual IPs registered for the same zone
         all_ips = list(dict.fromkeys(aset["addresses"] + list(manual_ips)))
         enriched_sets.append({
             "name": aset["name"],
@@ -238,19 +320,24 @@ def get_enriched_address_book(creds: SRXCredentials) -> dict:
                     "ip": ip,
                     "source": "manual" if ip in manual_ips else "morpheus",
                     "quarantined": ip in quarantined,
+                    "zone": resolve_zone(ip),               # ← new key
                 }
                 for ip in all_ips
             ]
         })
 
-    # Also include manual-only sets that don't exist in Morpheus book
     morpheus_set_names = {s["name"] for s in morpheus_book.get("address_sets", [])}
     for aset in manual_book.get("address_sets", []):
         if aset["name"] not in morpheus_set_names:
             enriched_sets.append({
                 "name": aset["name"],
                 "addresses": [
-                    {"ip": ip, "source": "manual", "quarantined": ip in quarantined}
+                    {
+                        "ip": ip,
+                        "source": "manual",
+                        "quarantined": ip in quarantined,
+                        "zone": resolve_zone(ip),            # ← new key
+                    }
                     for ip in aset["addresses"]
                 ]
             })
@@ -260,7 +347,6 @@ def get_enriched_address_book(creds: SRXCredentials) -> dict:
         "quarantined": list(quarantined),
         "address_sets": enriched_sets,
     }
-
 
 # ── quarantine ─────────────────────────────────────────────────────────────────
 
@@ -400,12 +486,20 @@ def get_policies(creds: SRXCredentials) -> list[dict]:
                     action = a
                     break
 
+        match = ctx.find("match")
+        source_addresses = _xml_list(match, "source-address")
+        destination_addresses = _xml_list(match, "destination-address")
+        ports = [_humanize_application(a) for a in _xml_list(match, "application")]
+
         if policy_name:
             policies.append({
                 "from_zone": from_zone,
-                "to_zone":   to_zone,
-                "name":      policy_name,
-                "action":    action,
+                "to_zone": to_zone,
+                "name": policy_name,
+                "action": action,
+                "source_addresses": source_addresses,
+                "destination_addresses": destination_addresses,
+                "ports": ports,
             })
 
     return policies
@@ -474,6 +568,21 @@ _JUNOS_BUILTIN: dict[tuple[int, str], str] = {
     (3306, "tcp"): "junos-mysql",
     (3389, "tcp"): "junos-rdp",
 }
+_BUILTIN_TO_PORT = {v: f"{proto}/{port}" for (port, proto), v in _JUNOS_BUILTIN.items()}
+
+def _humanize_application(app: str) -> str:
+    """Turns a Junos application/object name back into a readable port string."""
+    if app == "any":
+        return "any"
+    if app in _BUILTIN_TO_PORT:
+        return _BUILTIN_TO_PORT[app]
+    if app.startswith(SAIL_APP_PREFIX):
+        rest = app[len(SAIL_APP_PREFIX):]
+        parts = rest.split("_")
+        if len(parts) == 2:
+            proto, port = parts
+            return f"{proto.lower()}/{port}"
+    return app
 
 
 def get_sail_policies(creds: SRXCredentials) -> list[dict]:
