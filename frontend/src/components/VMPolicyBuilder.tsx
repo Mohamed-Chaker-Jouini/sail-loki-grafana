@@ -28,13 +28,6 @@ const QUICK_PORTS = [
 
 let _pid = 0
 
-// "Anyone / anything" usually maps to the internet-facing zone, often named
-// "untrust" by Juniper convention — used only as a starting suggestion in an
-// editable dropdown, never applied silently.
-function guessUntrustZone(zones: string[]): string {
-  return zones.find(z => /untrust/i.test(z)) || ''
-}
-
 // ── helpers ────────────────────────────────────────────────────────────────────
 function SubHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
@@ -58,28 +51,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ZoneOverridePicker({
-  label, zones, value, onChange,
-}: { label: string; zones: string[]; value: string; onChange: (z: string) => void }) {
-  return (
-    <div style={{
-      background: 'rgba(255,200,50,.08)', border: '1px solid rgba(255,200,50,.35)',
-      borderRadius: 3, padding: '10px 12px', fontSize: 11, color: '#9a7a00',
-      marginTop: 8, lineHeight: 1.6,
-    }}>
-      ⚠ {label}
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{ display: 'block', marginTop: 6, width: '100%', fontSize: 11 }}
-      >
-        <option value="">— pick the firewall zone —</option>
-        {zones.map(z => <option key={z} value={z}>{z}</option>)}
-      </select>
-    </div>
-  )
-}
-
 // ── main component ─────────────────────────────────────────────────────────────
 export default function VMPolicyBuilder() {
   const [zones,    setZones]    = useState<string[]>([])
@@ -98,11 +69,6 @@ export default function VMPolicyBuilder() {
   const [direction, setDirection]   = useState<'inbound' | 'outbound'>('inbound')
   const [otherType, setOtherType]   = useState<'any' | 'specific'>('any')
   const [otherIp,   setOtherIp]     = useState('')
-
-  // Manual overrides — only touched when auto-detection can't find a zone,
-  // or when "anyone/anything" needs a zone picked for it.
-  const [subjectZoneOverride, setSubjectZoneOverride] = useState('')
-  const [otherZoneOverride,   setOtherZoneOverride]   = useState('')
 
   // ── data fetching ─────────────────────────────────────────────────────────────
   const fetchBook = useCallback(async () => {
@@ -141,11 +107,6 @@ export default function VMPolicyBuilder() {
 
   useEffect(() => { fetchBook(); fetchPolicies() }, [fetchBook, fetchPolicies])
 
-  // Reset zone overrides whenever the underlying selection changes, so a
-  // stale manual pick from a previous VM never silently carries over.
-  useEffect(() => { setSubjectZoneOverride('') }, [subjectIp])
-  useEffect(() => { setOtherZoneOverride('') }, [otherIp, otherType])
-
   // ── port list helpers ─────────────────────────────────────────────────────────
   const addPort = () => setPorts(p => [...p, { id: ++_pid, protocol: 'tcp', port: '' }])
   const rmPort = (id: number) => setPorts(p => p.filter(e => e.id !== id))
@@ -175,18 +136,18 @@ export default function VMPolicyBuilder() {
     return acc
   }, {})
 
-  // ── zone resolution (ground truth from backend, with manual fallback) ────────
+  // ── zone resolution ───────────────────────────────────────────────────────────
+  // Zones are always implicit: VMs live in "trust", "anyone" is in "untrust".
+  // Auto-detection from the address book is used when available; otherwise we
+  // fall back to the conventional Juniper names without surfacing a dropdown.
   const subject = allIps.find(a => a.ip === subjectIp) || null
   const other   = otherType === 'specific' ? (allIps.find(a => a.ip === otherIp) || null) : null
 
-  const subjectZoneAuto = subject?.zone || ''
-  const otherZoneAuto   = otherType === 'any' ? guessUntrustZone(zones) : (other?.zone || '')
+  const subjectZone = subject?.zone || 'trust'
+  const otherZone   = otherType === 'any' ? 'trust' : (other?.zone || 'trust')
 
-  const subjectZone = subjectZoneOverride || subjectZoneAuto
-  const otherZone   = otherZoneOverride   || otherZoneAuto
-
-  const zonesResolved = !!subjectIp && !!subjectZone &&
-    (otherType === 'any' ? !!otherZone : (!!otherIp && !!otherZone))
+  const zonesResolved = !!subjectIp &&
+    (otherType === 'any' ? true : !!otherIp)
 
   function autoRuleName(): string {
     if (!subjectIp) return ''
@@ -205,7 +166,7 @@ export default function VMPolicyBuilder() {
   async function handleSubmit() {
     if (!subjectIp) { showToast('Select which VM this rule is for'); return }
     if (otherType === 'specific' && !otherIp) { showToast('Select the other VM'); return }
-    if (!zonesResolved) { showToast('Pick the firewall zone(s) above before creating the rule'); return }
+    if (!zonesResolved) { showToast('Complete the rule fields before creating'); return }
 
     const from_zone = direction === 'inbound' ? otherZone : subjectZone
     const to_zone   = direction === 'inbound' ? subjectZone : otherZone
@@ -236,7 +197,6 @@ export default function VMPolicyBuilder() {
       setRuleName(''); setNameTouched(false)
       setPorts([{ id: ++_pid, protocol: 'tcp', port: '' }])
       setSubjectIp(''); setOtherIp(''); setOtherType('any'); setDirection('inbound')
-      setSubjectZoneOverride(''); setOtherZoneOverride('')
       fetchPolicies()
     } catch (e: any) {
       showToast('Error: ' + e.message)
@@ -299,8 +259,7 @@ export default function VMPolicyBuilder() {
         borderRadius: 3, padding: '10px 14px', marginBottom: 20,
       }}>
         Decide what a VM is allowed to talk to and on which ports. Each rule creates a firewall
-        policy. The firewall zone names (the "trust"/"untrust" plumbing) are detected for you
-        automatically — you only see them if detection fails. Rules created here are prefixed{' '}
+        policy. Rules created here are prefixed{' '}
         <code style={{ fontSize: 10 }}>SAIL_</code> and survive automation reconciliation.
       </div>
 
@@ -325,19 +284,11 @@ export default function VMPolicyBuilder() {
                 {Object.entries(ipsByTier).map(([tier, ips]) => (
                   <optgroup key={tier} label={`${tier} group`}>
                     {ips.map(a => (
-                      <option key={a.ip} value={a.ip}>{a.ip} ({a.zone || 'zone unknown'})</option>
+                      <option key={a.ip} value={a.ip}>{a.ip} ({a.zone || 'trust'})</option>
                     ))}
                   </optgroup>
                 ))}
               </select>
-              {subjectIp && !subjectZoneAuto && (
-                <ZoneOverridePicker
-                  label={`Couldn't automatically detect ${subjectIp}'s firewall zone.`}
-                  zones={zones}
-                  value={subjectZoneOverride}
-                  onChange={setSubjectZoneOverride}
-                />
-              )}
             </div>
 
             {/* Step 2: direction */}
@@ -365,43 +316,20 @@ export default function VMPolicyBuilder() {
                 </label>
               </div>
               {otherType === 'specific' && (
-                <>
-                  <select
-                    value={otherIp}
-                    onChange={e => setOtherIp(e.target.value)}
-                    style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}
-                  >
-                    <option value="">— select VM —</option>
-                    {Object.entries(ipsByTier).map(([tier, ips]) => (
-                      <optgroup key={tier} label={`${tier} group`}>
-                        {ips.filter(a => a.ip !== subjectIp).map(a => (
-                          <option key={a.ip} value={a.ip}>{a.ip} ({a.zone || 'zone unknown'})</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  {otherIp && !otherZoneAuto && (
-                    <ZoneOverridePicker
-                      label={`Couldn't automatically detect ${otherIp}'s firewall zone.`}
-                      zones={zones}
-                      value={otherZoneOverride}
-                      onChange={setOtherZoneOverride}
-                    />
-                  )}
-                </>
-              )}
-              {otherType === 'any' && (
-                <div style={{ marginTop: 8 }}>
-                  <FieldLabel>Which firewall zone is "anyone" in? (usually the internet-facing zone)</FieldLabel>
-                  <select
-                    value={otherZone}
-                    onChange={e => setOtherZoneOverride(e.target.value)}
-                    style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}
-                  >
-                    <option value="">— select zone —</option>
-                    {zones.map(z => <option key={z} value={z}>{z}</option>)}
-                  </select>
-                </div>
+                <select
+                  value={otherIp}
+                  onChange={e => setOtherIp(e.target.value)}
+                  style={{ width: '100%', fontSize: 11, fontFamily: 'monospace' }}
+                >
+                  <option value="">— select VM —</option>
+                  {Object.entries(ipsByTier).map(([tier, ips]) => (
+                    <optgroup key={tier} label={`${tier} group`}>
+                      {ips.filter(a => a.ip !== subjectIp).map(a => (
+                        <option key={a.ip} value={a.ip}>{a.ip} ({a.zone || 'trust'})</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
               )}
             </div>
 
